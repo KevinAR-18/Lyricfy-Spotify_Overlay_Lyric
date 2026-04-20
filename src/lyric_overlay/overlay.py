@@ -363,7 +363,10 @@ class OverlayWindow(QWidget):
 
     def _apply_window_mode(self) -> None:
         target_width = 640 if not self._expanded else 760
-        target_height = 102 if not self._expanded else 470
+        if self._expanded:
+            target_height = 470
+        else:
+            target_height = 82 if self.compact_label.heightForWidth(self.compact_label.width()) <= 24 else 100
         self.setMinimumSize(target_width, 76)
         self.resize(target_width, target_height)
         self._reposition_after_resize()
