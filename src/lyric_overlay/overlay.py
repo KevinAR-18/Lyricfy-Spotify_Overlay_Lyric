@@ -33,6 +33,7 @@ class OverlayWindow(QWidget):
         self._snap_pos = None
         self._snap_threshold = 28
         self._user_positioned = False
+        self._allow_exit = False
         self._track_text = "Spotify tidak sedang memutar lagu"
         self._artist_text = ""
         self._current_line_text = ""
@@ -45,7 +46,7 @@ class OverlayWindow(QWidget):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        self.setWindowTitle("Lyric Overlay")
+        self.setWindowTitle("Lyricfy")
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -76,7 +77,7 @@ class OverlayWindow(QWidget):
 
         self.close_button = QToolButton()
         self.close_button.setText("x")
-        self.close_button.setToolTip("Close")
+        self.close_button.setToolTip("Tray mode")
         self.close_button.clicked.connect(self.request_close)
 
         self.compact_label = QLabel("Spotify tidak sedang memutar lagu")
@@ -419,17 +420,33 @@ class OverlayWindow(QWidget):
         event.accept()
 
     def request_close(self) -> None:
-        app = QApplication.instance()
-        if app is not None:
-            app.quit()
-        else:
-            self.close()
+        self.show_status("Lyricfy is running from the system tray.")
 
     def closeEvent(self, event) -> None:  # noqa: N802
-        app = QApplication.instance()
-        if app is not None:
-            app.quit()
-        super().closeEvent(event)
+        if self._allow_exit:
+            super().closeEvent(event)
+            return
+        event.ignore()
+        self.show_status("Lyricfy is running from the system tray.")
+
+    def show_from_tray(self) -> None:
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def hide_to_tray(self) -> None:
+        self.hide()
+
+    def open_settings_from_tray(self) -> None:
+        if not self.isVisible():
+            self.show()
+        if not self._expanded:
+            self.toggle_settings()
+        self.raise_()
+        self.activateWindow()
+
+    def allow_exit(self) -> None:
+        self._allow_exit = True
 
 
 def create_application() -> QApplication:

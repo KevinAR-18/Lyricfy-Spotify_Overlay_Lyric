@@ -1,2 +1,4 @@
 .env
 src/lyric_overlay/__pycache__/
+.spotify_cache
+.spotify_cache

@@ -3,16 +3,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QMenu, QSystemTrayIcon
+
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from lyric_overlay.app_controller import AppController
-    from lyric_overlay.config import AppConfig, ensure_directories, load_config, save_config
+    from lyric_overlay.config import AppConfig, ICON_FILE, ensure_directories, ensure_env_file, load_config, save_config
     from lyric_overlay.lyrics import LyricsRepository
     from lyric_overlay.overlay import OverlayWindow, create_application
     from lyric_overlay.spotify_client import SpotifyClient
 else:
     from .app_controller import AppController
-    from .config import AppConfig, ensure_directories, load_config, save_config
+    from .config import AppConfig, ICON_FILE, ensure_directories, ensure_env_file, load_config, save_config
     from .lyrics import LyricsRepository
     from .overlay import OverlayWindow, create_application
     from .spotify_client import SpotifyClient
@@ -31,11 +34,64 @@ def build_spotify_client(config: AppConfig) -> SpotifyClient | None:
 
 def main() -> int:
     ensure_directories()
+    ensure_env_file()
     config = load_config()
 
     app = create_application()
+    app.setApplicationName("Lyricfy")
+    icon_path = ICON_FILE
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     overlay = OverlayWindow()
+    if icon_path.exists():
+        overlay.setWindowIcon(QIcon(str(icon_path)))
     overlay.load_config_values(config)
+
+    tray_icon = None
+    if QSystemTrayIcon.isSystemTrayAvailable():
+        tray_icon = QSystemTrayIcon(app)
+        if icon_path.exists():
+            tray_icon.setIcon(QIcon(str(icon_path)))
+        tray_icon.setToolTip("Lyricfy")
+
+        tray_menu = QMenu()
+        show_action = QAction("Show Overlay", tray_menu)
+        hide_action = QAction("Hide Overlay", tray_menu)
+        settings_action = QAction("Open Settings", tray_menu)
+        exit_action = QAction("Exit", tray_menu)
+        tray_menu.addAction(show_action)
+        tray_menu.addAction(hide_action)
+        tray_menu.addAction(settings_action)
+        tray_menu.addSeparator()
+        tray_menu.addAction(exit_action)
+        tray_icon.setContextMenu(tray_menu)
+
+        def show_overlay() -> None:
+            overlay.show_from_tray()
+
+        def hide_overlay() -> None:
+            overlay.hide_to_tray()
+
+        def open_settings() -> None:
+            overlay.open_settings_from_tray()
+
+        def exit_app() -> None:
+            overlay.allow_exit()
+            overlay.close()
+            if tray_icon is not None:
+                tray_icon.hide()
+            app.quit()
+
+        show_action.triggered.connect(show_overlay)
+        hide_action.triggered.connect(hide_overlay)
+        settings_action.triggered.connect(open_settings)
+        exit_action.triggered.connect(exit_app)
+        tray_icon.activated.connect(
+            lambda reason: show_overlay()
+            if reason == QSystemTrayIcon.ActivationReason.Trigger
+            else None
+        )
+        tray_icon.show()
 
     spotify_client = build_spotify_client(config)
     if spotify_client is None:
