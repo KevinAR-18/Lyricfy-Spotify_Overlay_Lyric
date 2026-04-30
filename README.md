@@ -1,6 +1,6 @@
 # Lyricfy
 
-Lyricfy is a Windows desktop lyric overlay for Spotify built with Python and PySide6. It shows the current lyric line in a compact always-on-top window, with synced timing from local `.lrc` files or LRCLIB.
+Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from Spotify, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
 
 ## Features
 
@@ -10,12 +10,38 @@ Lyricfy is a Windows desktop lyric overlay for Spotify built with Python and PyS
 - Retries lyric lookup automatically when a new track does not resolve on the first attempt
 - Compact frameless overlay that stays on top
 - Draggable overlay with snap-back behavior near the last saved position
-- System tray controls for showing, hiding, opening settings, and exiting
+- System tray controls for show, hide, settings, and exit
 - In-app settings for Spotify credentials, redirect URI, lyric offset, and colors
 - Auto-created `.env` file on first launch
-- Spotify token cache stored separately from the source code in packaged builds
-- Quick auto color mode toggle with `Shift+C`
-- Quick reload/reconnect shortcut with `Ctrl+R`
+- Separate Spotify token cache for packaged builds
+- `Shift+C` shortcut to toggle lyric color quickly
+- `Ctrl+R` shortcut to reload Spotify connection quickly
+
+## Quick Start
+
+1. Create a Spotify app in the Spotify Developer Dashboard.
+2. Add this redirect URI:
+
+```text
+http://127.0.0.1:8888/callback
+```
+
+3. Copy the `Client ID` and `Client Secret`.
+4. Install dependencies and run Lyricfy:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+python src\main.py
+```
+
+5. Open Lyricfy settings and fill in:
+   - Spotify Client ID
+   - Spotify Client Secret
+   - Redirect URI
+6. Click `Save`, then click `Reload Spotify`.
 
 ## Requirements
 
@@ -103,6 +129,12 @@ LYRIC_TEXT_COLOR=#F4F4F4
 LYRIC_GLOW_COLOR=#66CCFFFF
 ```
 
+Important runtime files:
+
+- `.env`
+- `.spotify_cache`
+- `assets\lrc\`
+
 ## Run
 
 Start the app with:
@@ -126,7 +158,7 @@ The built-in settings panel supports:
 - Lyric Color
 - Lyric Glow Color
 
-Use `Save` to write changes to `.env`, then `Reload Spotify` to reconnect with the latest credentials.
+Use `Save` to write changes to `.env`, then use `Reload Spotify` or press `Ctrl+R` to reconnect with the latest credentials.
 
 ## Lyric Offset
 
@@ -194,8 +226,8 @@ The build script packages the app as a one-file windowed executable and includes
 
 ## Keyboard Shortcuts
 
-- `Shift+C` toggles the lyric color mode automatically
-- `Ctrl+R` reloads the app connection without opening settings
+- `Shift+C` toggles the lyric color mode quickly
+- `Ctrl+R` reloads the Spotify connection without opening settings
 
 ## Notes
 
