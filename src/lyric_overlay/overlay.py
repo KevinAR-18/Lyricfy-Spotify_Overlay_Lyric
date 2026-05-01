@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -53,6 +53,7 @@ class OverlayWindow(QWidget):
         self._overlay_text_color = "#F4F4F4"
         self._lyric_text_color = "#F4F4F4"
         self._lyric_glow_color = "#66CCFFFF"
+        self._last_window_size: tuple[int, int] | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -121,7 +122,7 @@ class OverlayWindow(QWidget):
         self.client_secret_input = self._create_input("Enter Spotify Client Secret")
         self.client_secret_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.redirect_uri_input = self._create_input("Enter Redirect URI")
-        self.lyric_offset_input = self._create_input("Example: -250 or 300")
+        self.lyric_offset_input = self._create_input("Default: 0")
         self.overlay_color_input = self._create_input("Example: #0A0A0AEB")
         self.text_color_input = self._create_input("Example: #F4F4F4")
         self.lyric_color_input = self._create_input("Example: #F4F4F4")
@@ -134,7 +135,7 @@ class OverlayWindow(QWidget):
         self.save_button.clicked.connect(self._emit_save)
 
         self.reconnect_button = QPushButton("Reload Spotify")
-        self.reconnect_button.clicked.connect(self.reconnect_requested.emit)
+        self.reconnect_button.clicked.connect(self.trigger_reconnect_shortcut)
 
         settings_actions.addWidget(self.save_button)
         settings_actions.addWidget(self.reconnect_button)
@@ -271,7 +272,7 @@ class OverlayWindow(QWidget):
         self.client_id_input.setText(config.spotify_client_id)
         self.client_secret_input.setText(config.spotify_client_secret)
         self.redirect_uri_input.setText(config.spotify_redirect_uri)
-        self.lyric_offset_input.setText(str(config.lyric_offset_ms))
+        self.lyric_offset_input.setText(str(config.lyric_offset_ms or 0))
         self.overlay_color_input.setText(config.overlay_bg_color)
         self.text_color_input.setText(config.overlay_text_color)
         self.lyric_color_input.setText(config.lyric_text_color)
@@ -316,7 +317,7 @@ class OverlayWindow(QWidget):
         if visibility_changed:
             self.status_label.setVisible(new_visible)
         self._refresh_compact_text()
-        if visibility_changed:
+        if visibility_changed and not self._expanded:
             self._apply_window_mode()
 
     def toggle_settings(self) -> None:
@@ -329,8 +330,8 @@ class OverlayWindow(QWidget):
         self.save_requested.emit(self.current_form_config())
 
     def trigger_reconnect_shortcut(self) -> None:
-        self.show_status("Reloading Spotify...")
-        self.reconnect_requested.emit()
+        self.show_status("Spotify trying to reconnect...")
+        QTimer.singleShot(0, self.reconnect_requested.emit)
 
     def toggle_lyric_color_shortcut(self) -> None:
         current_color = (self.lyric_color_input.text().strip() or self._lyric_text_color).upper()
@@ -386,19 +387,19 @@ class OverlayWindow(QWidget):
             or self.track_title_label.isVisible() != previous_header_visible
             or self.track_title_label.text() != previous_header_text
         ):
-            self._apply_window_mode()
+            self._apply_window_mode_if_needed()
 
     def set_paused(self) -> None:
         self._status_text = "Playback paused"
         self.status_label.setText(self._status_text)
         self.status_label.setVisible(True)
         self._refresh_compact_text()
-        self._apply_window_mode()
+        self._apply_window_mode_if_needed()
 
     def show_no_lyrics_notice(self) -> None:
         self._no_lyrics_notice_until = time.monotonic() + self._NO_LYRICS_NOTICE_SECONDS
         self._refresh_compact_text()
-        self._apply_window_mode()
+        self._apply_window_mode_if_needed()
 
     def _refresh_compact_text(self) -> None:
         title_text = self._track_text.strip()
@@ -426,11 +427,18 @@ class OverlayWindow(QWidget):
         previous_header_text: str,
         previous_header_visible: bool,
     ) -> None:
+        if self._expanded:
+            return
         if (
             self.track_title_label.text() != previous_header_text
             or self.track_title_label.isVisible() != previous_header_visible
         ):
             self._apply_window_mode()
+
+    def _apply_window_mode_if_needed(self) -> None:
+        if self._expanded:
+            return
+        self._apply_window_mode()
 
     def _apply_window_mode(self) -> None:
         target_width = 640 if not self._expanded else 760
@@ -438,7 +446,11 @@ class OverlayWindow(QWidget):
             target_height = 470
         else:
             target_height = 82 if self.compact_label.heightForWidth(self.compact_label.width()) <= 24 else 100
+        target_size = (target_width, target_height)
         self.setMinimumSize(target_width, 76)
+        if self._last_window_size == target_size:
+            return
+        self._last_window_size = target_size
         self.resize(target_width, target_height)
         self._reposition_after_resize()
 

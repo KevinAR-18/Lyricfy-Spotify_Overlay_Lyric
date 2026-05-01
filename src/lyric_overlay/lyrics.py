@@ -45,18 +45,32 @@ class LyricsRepository:
         self.lrclib_enabled = lrclib_enabled
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "lyric-overlay-starter/1.0"})
+        self._cache: dict[tuple[str, str, int], LyricsData] = {}
 
     def get_lyrics(self, artist: str, title: str, duration_ms: int) -> LyricsData:
+        cache_key = self._cache_key(artist=artist, title=title, duration_ms=duration_ms)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         local = self._load_local_lrc(artist=artist, title=title)
         if not local.is_empty:
+            self._cache[cache_key] = local
             return local
 
         if self.lrclib_enabled:
             remote = self._load_lrclib(artist=artist, title=title, duration_ms=duration_ms)
             if not remote.is_empty:
+                self._cache[cache_key] = remote
                 return remote
 
         return LyricsData(source="none", lines=[])
+
+    def _cache_key(self, artist: str, title: str, duration_ms: int) -> tuple[str, str, int]:
+        normalized_artist = " ".join(artist.casefold().split())
+        normalized_title = " ".join(title.casefold().split())
+        normalized_duration = round(duration_ms / 1000)
+        return normalized_artist, normalized_title, normalized_duration
 
     def _load_local_lrc(self, artist: str, title: str) -> LyricsData:
         filename = f"{sanitize_filename(artist)} - {sanitize_filename(title)}.lrc"
