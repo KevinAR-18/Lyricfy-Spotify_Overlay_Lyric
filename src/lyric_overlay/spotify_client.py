@@ -23,7 +23,7 @@ class SpotifyClient:
         redirect_uri: str,
     ) -> None:
         if not client_id or not client_secret or not redirect_uri:
-            raise ValueError("Spotify credentials belum lengkap di file .env")
+            raise ValueError("Spotify credentials are incomplete in .env")
 
         auth_manager = SpotifyOAuth(
             client_id=client_id,

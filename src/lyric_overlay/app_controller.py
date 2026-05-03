@@ -81,6 +81,7 @@ class AppController(QObject):
     _RENDER_INTERVAL_MS = 50
     _MAX_LYRICS_RETRIES = 3
     _LYRICS_RETRY_DELAY_SECONDS = 4.0
+    _FETCHING_LYRICS_STATUS = "Fetching lyrics..."
 
     def __init__(
         self,
@@ -183,6 +184,8 @@ class AppController(QObject):
 
         if not track.is_playing:
             self.overlay.set_paused()
+        elif self._should_show_fetching_status():
+            self.overlay.show_status(self._FETCHING_LYRICS_STATUS)
         else:
             self.overlay.show_status("")
 
@@ -207,11 +210,15 @@ class AppController(QObject):
             self._lyrics_retry_due_at = time.monotonic() + self._LYRICS_RETRY_DELAY_SECONDS
             if self._lyrics_retry_count >= self._MAX_LYRICS_RETRIES:
                 self.overlay.show_no_lyrics_notice()
+                self.overlay.show_status("")
+            else:
+                self.overlay.show_status(self._FETCHING_LYRICS_STATUS)
         else:
             self._lyrics_retry_count = 0
             self._lyrics_retry_due_at = 0.0
+            self.overlay.show_status("")
 
-        if current_track.is_playing:
+        if current_track.is_playing and not lyrics.is_empty:
             self.overlay.show_status("")
 
         self._render_current_state()
@@ -222,6 +229,7 @@ class AppController(QObject):
         loading_lyrics = LyricsData(source="loading", lines=[])
         self.snapshot.lyrics = loading_lyrics
         self.sync_engine.set_lyrics(loading_lyrics)
+        self.overlay.show_status(self._FETCHING_LYRICS_STATUS)
         self.lyrics_worker.fetch(track, self._lyrics_request_id)
 
     def _retry_lyrics_if_needed(self, track: TrackInfo) -> None:
@@ -285,7 +293,13 @@ class AppController(QObject):
         if "429" in lowered or "rate limit" in lowered or "too many requests" in lowered:
             return "Spotify API rate limit reached. Please try again shortly."
         if "connectionerror" in lowered or "failed to establish a new connection" in lowered:
-            return "Gagal terhubung ke Spotify API."
+            return "Failed to connect to the Spotify API."
         if normalized:
             return normalized
-        return "Terjadi error saat mengambil data Spotify."
+        return "An error occurred while fetching Spotify data."
+
+    def _should_show_fetching_status(self) -> bool:
+        lyrics = self.snapshot.lyrics
+        if lyrics is None:
+            return False
+        return lyrics.source in {"loading", "none"} and self._lyrics_retry_count < self._MAX_LYRICS_RETRIES

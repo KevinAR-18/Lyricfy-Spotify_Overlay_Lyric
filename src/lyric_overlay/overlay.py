@@ -44,7 +44,7 @@ class OverlayWindow(QWidget):
         self._snap_threshold = 28
         self._user_positioned = False
         self._allow_exit = False
-        self._track_text = "Spotify tidak sedang memutar lagu"
+        self._track_text = "Spotify is not playing"
         self._artist_text = ""
         self._current_line_text = ""
         self._status_text = ""
@@ -94,7 +94,7 @@ class OverlayWindow(QWidget):
         self.close_button.setToolTip("Hide Overlay")
         self.close_button.clicked.connect(self.request_close)
 
-        self.compact_label = QLabel("Spotify tidak sedang memutar lagu")
+        self.compact_label = QLabel("Spotify is not playing")
         self.compact_label.setFont(QFont("Segoe UI Semibold", 11))
         self.compact_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.compact_label.setMinimumWidth(540)
@@ -195,6 +195,10 @@ class OverlayWindow(QWidget):
                 color: {self._overlay_text_color};
                 padding: 6px 10px;
                 min-height: 32px;
+            }}
+            QCheckBox {{
+                color: {self._overlay_text_color};
+                background: transparent;
             }}
             QPushButton, QToolButton {{
                 background: rgba(255, 255, 255, 20);

@@ -7,6 +7,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Reads the currently playing track from Spotify
 - Displays synced lyrics using Spotify playback progress
 - Checks local `.lrc` files first, then falls back to LRCLIB
+- Caches fetched LRCLIB lyrics as local `.lrc` files for future playback
 - Retries lyric lookup automatically when a new track does not resolve on the first attempt
 - Compact frameless overlay that stays on top
 - Draggable overlay with snap-back behavior near the last saved position
@@ -15,6 +16,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Auto-created `.env` file on first launch
 - Separate Spotify token cache for packaged builds
 - Automatic `.lrc` cache for lyrics fetched from LRCLIB
+- Displays `Fetching lyrics...` while lyric lookup is still in progress
 - `Shift+C` shortcut to toggle lyric color quickly
 - `Ctrl+R` shortcut to reload Spotify connection quickly
 
@@ -166,6 +168,14 @@ The built-in settings panel supports:
 
 Use `Save` to write changes to `.env`, then use `Reload Spotify` or press `Ctrl+R` to reconnect with the latest credentials.
 
+Recommended value:
+
+```env
+POLL_INTERVAL_MS=1000
+```
+
+This keeps Spotify playback detection responsive without polling too aggressively.
+
 ## Lyric Offset
 
 `Lyric Offset (ms)` shifts the displayed lyric timing:
@@ -230,6 +240,7 @@ The build script packages the app as a one-file windowed executable and includes
 - The tray icon remains available for reopening settings or exiting the app
 - If lyrics are available, the main line shows the current lyric and the second line shows `Title - Artist` briefly at the start of the song
 - If lyrics are not available yet, the main line shows the track title and the second line shows the artist
+- While lyric lookup is still running or retrying, the overlay shows `Fetching lyrics...`
 - If lyric lookup still fails after automatic retries, the overlay briefly shows `No lyric found` and then returns to the title and artist view
 - If playback is paused, the overlay shows a paused status
 - If Spotify credentials are missing or invalid, the overlay prompts you to open settings
