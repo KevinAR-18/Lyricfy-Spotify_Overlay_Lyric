@@ -5,6 +5,7 @@ src/lyric_overlay/__pycache__/
 __pycache__/
 .pytest_cache/
 .mypy_cache/
+assets/lrc/downloaded/
 
 build/
 dist/
@@ -12,5 +13,6 @@ dist/
 *.ifp
 
 Lyricfy.spec
+.spotify_cache
 .spotify_cache
 .spotify_cache

@@ -6,6 +6,7 @@ from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
@@ -25,6 +26,7 @@ class OverlayWindow(QWidget):
     save_requested = Signal(object)
     reconnect_requested = Signal()
     lyric_color_toggle_requested = Signal(str)
+    clear_lyrics_cache_requested = Signal()
     overlay_hidden = Signal()
     overlay_shown = Signal()
 
@@ -127,6 +129,7 @@ class OverlayWindow(QWidget):
         self.text_color_input = self._create_input("Example: #F4F4F4")
         self.lyric_color_input = self._create_input("Example: #F4F4F4")
         self.glow_color_input = self._create_input("Example: #66CCFFFF")
+        self.auto_save_lrc_checkbox = QCheckBox("Save fetched lyrics as local .lrc cache")
 
         settings_actions = QHBoxLayout()
         settings_actions.setSpacing(8)
@@ -137,8 +140,12 @@ class OverlayWindow(QWidget):
         self.reconnect_button = QPushButton("Reload Spotify")
         self.reconnect_button.clicked.connect(self.trigger_reconnect_shortcut)
 
+        self.clear_cache_button = QPushButton("Clear Downloaded Lyrics")
+        self.clear_cache_button.clicked.connect(self.clear_lyrics_cache_requested.emit)
+
         settings_actions.addWidget(self.save_button)
         settings_actions.addWidget(self.reconnect_button)
+        settings_actions.addWidget(self.clear_cache_button)
         settings_actions.addStretch(1)
 
         settings_layout.addWidget(self._create_field("Spotify Client ID", self.client_id_input))
@@ -149,6 +156,7 @@ class OverlayWindow(QWidget):
         settings_layout.addWidget(self._create_field("Text Color", self.text_color_input))
         settings_layout.addWidget(self._create_field("Lyric Color", self.lyric_color_input))
         settings_layout.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
+        settings_layout.addWidget(self.auto_save_lrc_checkbox)
         settings_layout.addLayout(settings_actions)
         self.settings_panel.hide()
 
@@ -277,6 +285,7 @@ class OverlayWindow(QWidget):
         self.text_color_input.setText(config.overlay_text_color)
         self.lyric_color_input.setText(config.lyric_text_color)
         self.glow_color_input.setText(config.lyric_glow_color)
+        self.auto_save_lrc_checkbox.setChecked(config.auto_save_fetched_lrc)
         self.apply_config_theme(config)
 
     def current_form_config(self) -> AppConfig:
@@ -291,6 +300,7 @@ class OverlayWindow(QWidget):
             spotify_redirect_uri=self.redirect_uri_input.text().strip(),
             poll_interval_ms=1000,
             lrclib_enabled=True,
+            auto_save_fetched_lrc=self.auto_save_lrc_checkbox.isChecked(),
             lyric_offset_ms=lyric_offset_ms,
             overlay_bg_color=self.overlay_color_input.text().strip() or "#0A0A0AEB",
             overlay_text_color=self.text_color_input.text().strip() or "#F4F4F4",

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import requests
 
-from .config import LRC_DIR
+from .config import FETCHED_LRC_DIR, LRC_DIR
 from .models import LyricLine, LyricsData
 
 
@@ -41,8 +41,9 @@ def parse_lrc(text: str, source: str) -> LyricsData:
 
 
 class LyricsRepository:
-    def __init__(self, lrclib_enabled: bool = True) -> None:
+    def __init__(self, lrclib_enabled: bool = True, auto_save_fetched_lrc: bool = True) -> None:
         self.lrclib_enabled = lrclib_enabled
+        self.auto_save_fetched_lrc = auto_save_fetched_lrc
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "lyric-overlay-starter/1.0"})
         self._cache: dict[tuple[str, str, int], LyricsData] = {}
@@ -73,12 +74,11 @@ class LyricsRepository:
         return normalized_artist, normalized_title, normalized_duration
 
     def _load_local_lrc(self, artist: str, title: str) -> LyricsData:
-        filename = f"{sanitize_filename(artist)} - {sanitize_filename(title)}.lrc"
-        path = LRC_DIR / filename
-        if not path.exists():
-            return LyricsData(source="local", lines=[])
-
-        return parse_lrc(path.read_text(encoding="utf-8"), source=f"local:{path.name}")
+        for path in self._local_lrc_paths(artist=artist, title=title):
+            if not path.exists():
+                continue
+            return parse_lrc(path.read_text(encoding="utf-8"), source=f"local:{path.name}")
+        return LyricsData(source="local", lines=[])
 
     def _load_lrclib(self, artist: str, title: str, duration_ms: int) -> LyricsData:
         try:
@@ -99,6 +99,37 @@ class LyricsRepository:
             if not synced.strip():
                 return LyricsData(source="lrclib", lines=[])
 
-            return parse_lrc(synced, source="lrclib")
+            lyrics = parse_lrc(synced, source="lrclib")
+            if not lyrics.is_empty and self.auto_save_fetched_lrc:
+                self._save_fetched_lrc(artist=artist, title=title, text=synced)
+            return lyrics
         except requests.RequestException:
             return LyricsData(source="lrclib", lines=[])
+
+    def set_lrclib_enabled(self, enabled: bool) -> None:
+        self.lrclib_enabled = enabled
+
+    def set_auto_save_fetched_lrc(self, enabled: bool) -> None:
+        self.auto_save_fetched_lrc = enabled
+
+    def clear_downloaded_cache(self) -> int:
+        removed = 0
+        for path in FETCHED_LRC_DIR.glob("*.lrc"):
+            try:
+                path.unlink()
+                removed += 1
+            except OSError:
+                continue
+        self._cache.clear()
+        return removed
+
+    def _local_lrc_paths(self, artist: str, title: str) -> list[Path]:
+        filename = f"{sanitize_filename(artist)} - {sanitize_filename(title)}.lrc"
+        return [LRC_DIR / filename, FETCHED_LRC_DIR / filename]
+
+    def _save_fetched_lrc(self, artist: str, title: str, text: str) -> None:
+        path = FETCHED_LRC_DIR / f"{sanitize_filename(artist)} - {sanitize_filename(title)}.lrc"
+        try:
+            path.write_text(text.strip() + "\n", encoding="utf-8")
+        except OSError:
+            return

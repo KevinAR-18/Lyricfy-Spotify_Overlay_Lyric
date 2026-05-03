@@ -101,7 +101,10 @@ def main() -> int:
 
     controller = AppController(
         spotify_client=spotify_client,
-        lyrics_repository=LyricsRepository(lrclib_enabled=config.lrclib_enabled),
+        lyrics_repository=LyricsRepository(
+            lrclib_enabled=config.lrclib_enabled,
+            auto_save_fetched_lrc=config.auto_save_fetched_lrc,
+        ),
         overlay=overlay,
         config=config,
     )
@@ -114,6 +117,7 @@ def main() -> int:
             spotify_redirect_uri=new_config.spotify_redirect_uri or "http://127.0.0.1:8888/callback",
             poll_interval_ms=current_config.poll_interval_ms,
             lrclib_enabled=current_config.lrclib_enabled,
+            auto_save_fetched_lrc=new_config.auto_save_fetched_lrc,
             lyric_offset_ms=new_config.lyric_offset_ms,
             overlay_bg_color=new_config.overlay_bg_color or current_config.overlay_bg_color,
             overlay_text_color=new_config.overlay_text_color or current_config.overlay_text_color,
@@ -124,6 +128,7 @@ def main() -> int:
         overlay.apply_config_theme(saved_config)
         overlay.show_status("Settings saved to .env")
         controller.config = saved_config
+        controller.lyrics_repository.set_auto_save_fetched_lrc(saved_config.auto_save_fetched_lrc)
 
     def toggle_lyric_color(lyric_color: str) -> None:
         saved_config = AppConfig(
@@ -132,6 +137,7 @@ def main() -> int:
             spotify_redirect_uri=controller.config.spotify_redirect_uri,
             poll_interval_ms=controller.config.poll_interval_ms,
             lrclib_enabled=controller.config.lrclib_enabled,
+            auto_save_fetched_lrc=controller.config.auto_save_fetched_lrc,
             lyric_offset_ms=controller.config.lyric_offset_ms,
             overlay_bg_color=controller.config.overlay_bg_color,
             overlay_text_color=controller.config.overlay_text_color,
@@ -141,8 +147,18 @@ def main() -> int:
         save_config(saved_config)
         controller.config = saved_config
 
+    def clear_downloaded_lyrics() -> None:
+        removed = controller.lyrics_repository.clear_downloaded_cache()
+        if removed == 0:
+            overlay.show_status("No downloaded lyric cache to clear")
+            return
+        suffix = "file" if removed == 1 else "files"
+        overlay.show_status(f"Cleared {removed} downloaded lyric {suffix}")
+
     def reconnect_spotify() -> None:
         latest = load_config()
+        controller.lyrics_repository.set_lrclib_enabled(latest.lrclib_enabled)
+        controller.lyrics_repository.set_auto_save_fetched_lrc(latest.auto_save_fetched_lrc)
         new_client = build_spotify_client(latest)
         if new_client is None:
             overlay.show_status("Spotify credentials are incomplete")
@@ -153,6 +169,7 @@ def main() -> int:
     overlay.save_requested.connect(save_settings)
     overlay.reconnect_requested.connect(reconnect_spotify)
     overlay.lyric_color_toggle_requested.connect(toggle_lyric_color)
+    overlay.clear_lyrics_cache_requested.connect(clear_downloaded_lyrics)
     overlay.overlay_hidden.connect(controller.pause_polling)
     overlay.overlay_shown.connect(controller.resume_polling)
     app.aboutToQuit.connect(controller.stop)

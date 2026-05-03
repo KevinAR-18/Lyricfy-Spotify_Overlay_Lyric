@@ -46,6 +46,7 @@ RESOURCE_DIR = _resource_dir()
 APP_DATA_DIR = _user_data_dir() if getattr(sys, "frozen", False) else BASE_DIR
 ASSETS_DIR = APP_DATA_DIR / "assets"
 LRC_DIR = ASSETS_DIR / "lrc"
+FETCHED_LRC_DIR = LRC_DIR / "downloaded"
 TOKEN_CACHE = APP_DATA_DIR / ".spotify_cache"
 ENV_FILE = APP_DATA_DIR / ".env"
 FALLBACK_ENV_FILE = BASE_DIR / ".env"
@@ -60,6 +61,7 @@ class AppConfig:
     spotify_redirect_uri: str
     poll_interval_ms: int = 1000
     lrclib_enabled: bool = True
+    auto_save_fetched_lrc: bool = True
     lyric_offset_ms: int = 0
     overlay_bg_color: str = "#0A0A0AEB"
     overlay_text_color: str = "#F4F4F4"
@@ -75,6 +77,7 @@ def default_config() -> AppConfig:
         spotify_redirect_uri="http://127.0.0.1:8888/callback",
         poll_interval_ms=1000,
         lrclib_enabled=True,
+        auto_save_fetched_lrc=True,
         lyric_offset_ms=0,
         overlay_bg_color="#0A0A0AEB",
         overlay_text_color="#F4F4F4",
@@ -101,6 +104,7 @@ def load_config() -> AppConfig:
         ).strip(),
         poll_interval_ms=int(os.getenv("POLL_INTERVAL_MS", "1000")),
         lrclib_enabled=os.getenv("LRCLIB_ENABLED", "true").lower() == "true",
+        auto_save_fetched_lrc=os.getenv("AUTO_SAVE_FETCHED_LRC", "true").lower() == "true",
         lyric_offset_ms=int(os.getenv("LYRIC_OFFSET_MS", "0")),
         overlay_bg_color=os.getenv("OVERLAY_BG_COLOR", "#0A0A0AEB").strip() or "#0A0A0AEB",
         overlay_text_color=os.getenv("OVERLAY_TEXT_COLOR", "#F4F4F4").strip() or "#F4F4F4",
@@ -114,6 +118,7 @@ def ensure_directories() -> None:
     APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     LRC_DIR.mkdir(parents=True, exist_ok=True)
+    FETCHED_LRC_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def ensure_env_file() -> None:
@@ -138,6 +143,7 @@ def save_config(config: AppConfig) -> None:
         f"SPOTIFY_REDIRECT_URI={config.spotify_redirect_uri}",
         f"POLL_INTERVAL_MS={config.poll_interval_ms}",
         f"LRCLIB_ENABLED={'true' if config.lrclib_enabled else 'false'}",
+        f"AUTO_SAVE_FETCHED_LRC={'true' if config.auto_save_fetched_lrc else 'false'}",
         f"LYRIC_OFFSET_MS={config.lyric_offset_ms}",
         f"OVERLAY_BG_COLOR={config.overlay_bg_color}",
         f"OVERLAY_TEXT_COLOR={config.overlay_text_color}",

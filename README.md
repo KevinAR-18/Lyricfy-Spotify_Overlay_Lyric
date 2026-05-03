@@ -14,6 +14,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - In-app settings for Spotify credentials, redirect URI, lyric offset, and colors
 - Auto-created `.env` file on first launch
 - Separate Spotify token cache for packaged builds
+- Automatic `.lrc` cache for lyrics fetched from LRCLIB
 - `Shift+C` shortcut to toggle lyric color quickly
 - `Ctrl+R` shortcut to reload Spotify connection quickly
 
@@ -106,6 +107,7 @@ In development mode, runtime files stay in the project folder:
 .env
 .spotify_cache
 assets\lrc\
+assets\lrc\downloaded\
 ```
 
 In packaged `.exe` mode, runtime files are stored in:
@@ -122,6 +124,7 @@ SPOTIFY_CLIENT_SECRET=
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 POLL_INTERVAL_MS=1000
 LRCLIB_ENABLED=true
+AUTO_SAVE_FETCHED_LRC=true
 LYRIC_OFFSET_MS=0
 OVERLAY_BG_COLOR=#0A0A0AEB
 OVERLAY_TEXT_COLOR=#F4F4F4
@@ -134,6 +137,7 @@ Important runtime files:
 - `.env`
 - `.spotify_cache`
 - `assets\lrc\`
+- `assets\lrc\downloaded\`
 
 ## Run
 
@@ -157,6 +161,8 @@ The built-in settings panel supports:
 - Text Color
 - Lyric Color
 - Lyric Glow Color
+- Auto-save fetched LRCLIB lyrics as local `.lrc` cache
+- Clear downloaded lyric cache
 
 Use `Save` to write changes to `.env`, then use `Reload Spotify` or press `Ctrl+R` to reconnect with the latest credentials.
 
@@ -195,6 +201,10 @@ Example content:
 ```
 
 Lyricfy sanitizes invalid Windows filename characters when matching local files.
+
+Lyrics fetched from LRCLIB can be cached automatically as `.lrc` files in `assets/lrc/downloaded/`. This cache is reused on the next app launch and can be cleared from the settings panel.
+
+If you want to disable this behavior, set `AUTO_SAVE_FETCHED_LRC=false` in `.env` or uncheck it in the settings panel and save.
 
 ## Build
 
