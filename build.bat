@@ -31,9 +31,11 @@ echo.
   --hidden-import=PySide6.QtGui ^
   --hidden-import=PySide6.QtWidgets ^
   --hidden-import=spotipy ^
+  --hidden-import=winsdk ^
   --hidden-import=requests ^
   --hidden-import=dotenv ^
   --collect-all=spotipy ^
+  --collect-all=winsdk ^
   --collect-all=PySide6 ^
   src\main.py
 

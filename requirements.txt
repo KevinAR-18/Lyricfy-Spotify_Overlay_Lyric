@@ -18,3 +18,4 @@ setuptools==82.0.1
 shiboken6==6.11.0
 spotipy==2.26.0
 urllib3==2.6.3
+winsdk==1.0.0b10

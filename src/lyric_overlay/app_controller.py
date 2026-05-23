@@ -6,11 +6,11 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from .config import AppConfig
+from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE
 from .lyrics import LyricsRepository
 from .models import LyricsData, TrackInfo
 from .overlay import OverlayWindow
-from .spotify_client import SpotifyClient
+from .spotify_client import PlaybackClient
 from .sync_engine import SyncEngine
 
 
@@ -24,9 +24,9 @@ class PlaybackWorker(QObject):
     refreshed = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, spotify_client: SpotifyClient, poll_interval_ms: int) -> None:
+    def __init__(self, playback_client: PlaybackClient, poll_interval_ms: int) -> None:
         super().__init__()
-        self.spotify_client = spotify_client
+        self.playback_client = playback_client
         self.poll_interval_ms = poll_interval_ms
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -47,7 +47,7 @@ class PlaybackWorker(QObject):
     def _run(self) -> None:
         while not self._stop_event.is_set():
             try:
-                self.refreshed.emit(self.spotify_client.get_current_track())
+                self.refreshed.emit(self.playback_client.get_current_track())
             except Exception as exc:  # noqa: BLE001
                 self.failed.emit(str(exc))
             self._stop_event.wait(self.poll_interval_ms / 1000)
@@ -85,13 +85,13 @@ class AppController(QObject):
 
     def __init__(
         self,
-        spotify_client: SpotifyClient | None,
+        playback_client: PlaybackClient | None,
         lyrics_repository: LyricsRepository,
         overlay: OverlayWindow,
         config: AppConfig,
     ) -> None:
         super().__init__()
-        self.spotify_client = spotify_client
+        self.playback_client = playback_client
         self.lyrics_repository = lyrics_repository
         self.overlay = overlay
         self.config = config
@@ -110,9 +110,9 @@ class AppController(QObject):
         self.lyrics_worker.fetched.connect(self._apply_fetched_lyrics)
 
     def start(self) -> None:
-        if self.spotify_client is None:
+        if self.playback_client is None:
             self.overlay.set_track(None)
-            self.overlay.set_lines("Open Settings to add Spotify credentials", "")
+            self.overlay.set_lines(*self._playback_unavailable_lines())
             return
         if not self._render_timer.isActive():
             self._render_timer.start()
@@ -124,9 +124,14 @@ class AppController(QObject):
             self.worker = None
         self._render_timer.stop()
 
-    def reconnect(self, spotify_client: SpotifyClient | None, config: AppConfig) -> None:
+    def reconnect(
+        self,
+        playback_client: PlaybackClient | None,
+        config: AppConfig,
+        unavailable_message: str | None = None,
+    ) -> None:
         self.stop()
-        self.spotify_client = spotify_client
+        self.playback_client = playback_client
         self.config = config
         self.snapshot = PlaybackSnapshot()
         self._lyrics_request_id = 0
@@ -134,19 +139,20 @@ class AppController(QObject):
         self._lyrics_retry_due_at = 0.0
         self.sync_engine.set_lyrics(LyricsData(source="none", lines=[]))
         self.overlay.load_config_values(config)
-        if self.spotify_client is None:
+        if self.playback_client is None:
             self.overlay.set_track(None)
-            self.overlay.set_lines("Spotify credentials are invalid", "")
+            primary, secondary = self._playback_unavailable_lines()
+            self.overlay.set_lines(unavailable_message or primary, secondary)
             return
 
-        self.overlay.show_status("Spotify reconnected")
+        self.overlay.show_status("Spotify playback connected")
         self.start()
 
     def pause_polling(self) -> None:
         self.stop()
 
     def resume_polling(self) -> None:
-        if self.spotify_client is None:
+        if self.playback_client is None:
             return
         if not self._render_timer.isActive():
             self._render_timer.start()
@@ -244,13 +250,13 @@ class AppController(QObject):
         self._request_lyrics(track)
 
     def _start_worker(self) -> None:
-        if self.spotify_client is None:
+        if self.playback_client is None:
             return
         if self.worker is not None:
             return
 
         self.worker = PlaybackWorker(
-            spotify_client=self.spotify_client,
+            playback_client=self.playback_client,
             poll_interval_ms=self.config.poll_interval_ms,
         )
         self.worker.refreshed.connect(self.refresh)
@@ -303,3 +309,14 @@ class AppController(QObject):
         if lyrics is None:
             return False
         return lyrics.source in {"loading", "none"} and self._lyrics_retry_count < self._MAX_LYRICS_RETRIES
+
+    def _playback_unavailable_lines(self) -> tuple[str, str]:
+        if self.config.playback_source == SPOTIFY_API_PLAYBACK_SOURCE:
+            return (
+                "Fill Spotify API credentials in Settings",
+                "Then press Ctrl+R to retry",
+            )
+        return (
+            "Open Spotify desktop and start playback",
+            "Then press Ctrl+R to retry",
+        )

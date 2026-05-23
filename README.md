@@ -1,6 +1,6 @@
 # Lyricfy
 
-Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from Spotify, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
+Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from the local Windows media session by default, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
 
 ## Features
 
@@ -13,7 +13,9 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Compact frameless overlay that stays on top
 - Draggable overlay with snap-back behavior near the last saved position
 - System tray controls for show, hide, settings, and exit
+- System tray playback mode switch between `Non-API` and `API`
 - In-app settings for Spotify credentials, redirect URI, lyric offset, and colors
+- Windows local playback mode by default, without Spotify Developer credentials
 - Auto-created `.env` file on first launch
 - Separate Spotify token cache for packaged builds
 - Automatic `.lrc` cache for lyrics fetched from LRCLIB
@@ -24,15 +26,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 
 ## Quick Start
 
-1. Create a Spotify app in the Spotify Developer Dashboard.
-2. Add this redirect URI:
-
-```text
-http://127.0.0.1:8888/callback
-```
-
-3. Copy the `Client ID` and `Client Secret`.
-4. Install dependencies and run Lyricfy:
+1. Install dependencies and run Lyricfy:
 
 ```powershell
 python -m venv .venv
@@ -42,18 +36,14 @@ Copy-Item .env.example .env
 python src\main.py
 ```
 
-5. Open Lyricfy settings and fill in:
-   - Spotify Client ID
-   - Spotify Client Secret
-   - Redirect URI
-6. Click `Save`, then click `Reload Spotify`.
+2. Open Spotify desktop and start playback.
+3. Lyricfy should detect the current track automatically.
 
 ## Requirements
 
 - Windows
 - Python 3.11 or newer
-- A Spotify Premium account with active playback on a device
-- A Spotify Developer app
+- Spotify desktop app running on Windows
 
 ## Project Structure
 
@@ -80,7 +70,7 @@ python src\main.py
 `-- README.md
 ```
 
-## Spotify App Setup
+## Spotify API Mode Setup
 
 1. Open the Spotify Developer Dashboard.
 2. Create a new app.
@@ -123,6 +113,7 @@ In packaged `.exe` mode, runtime files are stored in:
 If no `.env` exists yet, Lyricfy creates one automatically with these defaults:
 
 ```env
+PLAYBACK_SOURCE=windows
 SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
@@ -157,10 +148,14 @@ Do not run internal module files directly.
 
 The built-in settings panel supports:
 
+- Automatically hides Spotify API credential fields while `Non-API` mode is active
 - Spotify Client ID
 - Spotify Client Secret
 - Redirect URI
 - Lyric Offset (ms)
+- Text Alignment
+- Lyric Font
+- Font Size
 - Overlay Color
 - Text Color
 - Lyric Color
@@ -168,7 +163,20 @@ The built-in settings panel supports:
 - Auto-save fetched LRCLIB lyrics as local `.lrc` cache
 - Clear downloaded lyric cache
 
-Use `Save` to write changes to `.env`, then use `Reload Spotify` or press `Ctrl+R` to reconnect with the latest credentials.
+Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl+R` to reconnect with the latest credentials.
+
+`PLAYBACK_SOURCE` supports:
+
+- `windows` for local Windows media session playback detection
+- `spotify_api` to force the previous Spotify Web API flow
+
+You can also change the mode from the tray menu:
+
+- `Show Overlay`
+- `Hide Overlay`
+- `Open Settings`
+- `Mode` -> `Non-API` or `API`
+- `Overlay Buttons` -> show or hide the `Settings` and `Hide` buttons on the overlay
 
 Recommended value:
 
@@ -248,7 +256,7 @@ The build script packages the app as a one-file windowed executable and includes
 - While lyric lookup is still running or retrying, the overlay shows `Fetching lyrics...`
 - If lyric lookup still fails after automatic retries, the overlay briefly shows `No lyric found` and then returns to the title and artist view
 - If playback is paused, the overlay shows a paused status
-- If Spotify credentials are missing or invalid, the overlay prompts you to open settings
+- If Windows media session access is unavailable, the overlay prompts you to open Spotify desktop and retry
 
 ## Keyboard Shortcuts
 
@@ -265,7 +273,7 @@ The build script packages the app as a one-file windowed executable and includes
 
 ## Sources
 
-- Spotify Web API for playback state
+- Windows Global System Media Transport Controls session for playback state
 - LRCLIB for synced lyric fallback
 
 ## Author

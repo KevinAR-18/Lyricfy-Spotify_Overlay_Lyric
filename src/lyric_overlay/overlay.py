@@ -2,23 +2,27 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QRect, QPropertyAnimation, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
+    QFontComboBox,
     QGraphicsDropShadowEffect,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from .config import AppConfig
+from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE, WINDOWS_PLAYBACK_SOURCE, default_config
 from .models import TrackInfo
 
 
@@ -55,7 +59,16 @@ class OverlayWindow(QWidget):
         self._overlay_text_color = "#F4F4F4"
         self._lyric_text_color = "#F4F4F4"
         self._lyric_glow_color = "#66CCFFFF"
+        self._lyric_font_family = "Segoe UI"
+        self._lyric_font_size = 11
+        self._text_alignment = "left"
+        self._playback_source = WINDOWS_PLAYBACK_SOURCE
+        self._show_settings_button = True
+        self._show_hide_button = True
         self._last_window_size: tuple[int, int] | None = None
+        self._resize_animation = QPropertyAnimation(self, b"geometry", self)
+        self._resize_animation.setDuration(180)
+        self._resize_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -67,8 +80,8 @@ class OverlayWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumSize(640, 76)
-        self.resize(640, 76)
+        self.setMinimumSize(620, 72)
+        self.resize(620, 72)
 
         root = QWidget(self)
         root.setObjectName("card")
@@ -97,15 +110,15 @@ class OverlayWindow(QWidget):
         self.compact_label = QLabel("Spotify is not playing")
         self.compact_label.setFont(QFont("Segoe UI Semibold", 11))
         self.compact_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.compact_label.setMinimumWidth(540)
+        self.compact_label.setMinimumWidth(500)
         self.compact_label.setWordWrap(True)
-        self.compact_label.setMaximumHeight(38)
 
         header_layout.addWidget(self.compact_label, 1)
         header_layout.addWidget(self.settings_button)
         header_layout.addWidget(self.close_button)
 
         self.track_title_label = QLabel("")
+        self.track_title_label.setObjectName("trackMeta")
         self.track_title_label.setFont(QFont("Segoe UI", 8))
         self.track_title_label.setWordWrap(False)
         self.track_title_label.hide()
@@ -118,13 +131,21 @@ class OverlayWindow(QWidget):
         self.settings_panel = QWidget()
         settings_layout = QVBoxLayout(self.settings_panel)
         settings_layout.setContentsMargins(0, 4, 0, 0)
-        settings_layout.setSpacing(8)
+        settings_layout.setSpacing(10)
 
         self.client_id_input = self._create_input("Enter Spotify Client ID")
         self.client_secret_input = self._create_input("Enter Spotify Client Secret")
         self.client_secret_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.redirect_uri_input = self._create_input("Enter Redirect URI")
         self.lyric_offset_input = self._create_input("Default: 0")
+        self.text_alignment_input = QComboBox()
+        self.text_alignment_input.addItem("Left", "left")
+        self.text_alignment_input.addItem("Center", "center")
+        self.text_alignment_input.addItem("Right", "right")
+        self.font_family_input = QFontComboBox()
+        self.font_size_input = QSpinBox()
+        self.font_size_input.setRange(8, 48)
+        self.font_size_input.setSingleStep(1)
         self.overlay_color_input = self._create_input("Example: #0A0A0AEB")
         self.text_color_input = self._create_input("Example: #F4F4F4")
         self.lyric_color_input = self._create_input("Example: #F4F4F4")
@@ -137,26 +158,76 @@ class OverlayWindow(QWidget):
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self._emit_save)
 
-        self.reconnect_button = QPushButton("Reload Spotify")
+        self.reconnect_button = QPushButton("Reload Playback")
         self.reconnect_button.clicked.connect(self.trigger_reconnect_shortcut)
 
         self.clear_cache_button = QPushButton("Clear Downloaded Lyrics")
         self.clear_cache_button.clicked.connect(self.clear_lyrics_cache_requested.emit)
 
+        self.reset_defaults_button = QPushButton("Reset Default")
+        self.reset_defaults_button.clicked.connect(self.reset_to_default_settings)
+
+        self.close_settings_button = QPushButton("Close Settings")
+        self.close_settings_button.clicked.connect(self.close_settings_panel)
+
         settings_actions.addWidget(self.save_button)
+        settings_actions.addWidget(self.reset_defaults_button)
         settings_actions.addWidget(self.reconnect_button)
         settings_actions.addWidget(self.clear_cache_button)
+        settings_actions.addWidget(self.close_settings_button)
         settings_actions.addStretch(1)
 
-        settings_layout.addWidget(self._create_field("Spotify Client ID", self.client_id_input))
-        settings_layout.addWidget(self._create_field("Spotify Client Secret", self.client_secret_input))
-        settings_layout.addWidget(self._create_field("Redirect URI", self.redirect_uri_input))
-        settings_layout.addWidget(self._create_offset_field())
-        settings_layout.addWidget(self._create_field("Overlay Color", self.overlay_color_input))
-        settings_layout.addWidget(self._create_field("Text Color", self.text_color_input))
-        settings_layout.addWidget(self._create_field("Lyric Color", self.lyric_color_input))
-        settings_layout.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
-        settings_layout.addWidget(self.auto_save_lrc_checkbox)
+        self.client_id_field = self._create_field("Spotify Client ID", self.client_id_input)
+        self.client_secret_field = self._create_field("Spotify Client Secret", self.client_secret_input)
+        self.redirect_uri_field = self._create_field("Redirect URI", self.redirect_uri_input)
+        self._oauth_fields = [
+            self.client_id_field,
+            self.client_secret_field,
+            self.redirect_uri_field,
+        ]
+
+        left_column = QVBoxLayout()
+        left_column.setContentsMargins(0, 0, 0, 0)
+        left_column.setSpacing(8)
+        left_column.addWidget(self._create_section_title("Text"))
+        left_column.addWidget(self._create_offset_field())
+        left_column.addWidget(self._create_field("Text Alignment", self.text_alignment_input))
+        left_column.addWidget(self._create_field("Lyric Font", self.font_family_input))
+        left_column.addWidget(self._create_field("Font Size", self.font_size_input))
+        left_column.addStretch(1)
+
+        right_column = QVBoxLayout()
+        right_column.setContentsMargins(0, 0, 0, 0)
+        right_column.setSpacing(8)
+        right_column.addWidget(self._create_section_title("Appearance"))
+        right_column.addWidget(self._create_field("Overlay Color", self.overlay_color_input))
+        right_column.addWidget(self._create_field("Text Color", self.text_color_input))
+        right_column.addWidget(self._create_field("Lyric Color", self.lyric_color_input))
+        right_column.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
+        right_column.addWidget(self.auto_save_lrc_checkbox)
+        right_column.addStretch(1)
+
+        credentials_layout = QVBoxLayout()
+        credentials_layout.setContentsMargins(0, 0, 0, 0)
+        credentials_layout.setSpacing(8)
+        credentials_layout.addWidget(self._create_section_title("Spotify API"))
+        credentials_layout.addWidget(self.client_id_field)
+        credentials_layout.addWidget(self.client_secret_field)
+        credentials_layout.addWidget(self.redirect_uri_field)
+        self.credentials_section = QWidget()
+        self.credentials_section.setLayout(credentials_layout)
+
+        content_grid = QGridLayout()
+        content_grid.setContentsMargins(0, 0, 0, 0)
+        content_grid.setHorizontalSpacing(12)
+        content_grid.setVerticalSpacing(10)
+        content_grid.addLayout(left_column, 0, 0)
+        content_grid.addLayout(right_column, 0, 1)
+        content_grid.setColumnStretch(0, 1)
+        content_grid.setColumnStretch(1, 1)
+
+        settings_layout.addLayout(content_grid)
+        settings_layout.addWidget(self.credentials_section)
         settings_layout.addLayout(settings_actions)
         self.settings_panel.hide()
 
@@ -170,6 +241,7 @@ class OverlayWindow(QWidget):
         self._lyric_glow.setOffset(0, 0)
         self.compact_label.setGraphicsEffect(self._lyric_glow)
 
+        self._sync_playback_source_ui()
         self._apply_theme()
         self._refresh_compact_text()
 
@@ -188,6 +260,15 @@ class OverlayWindow(QWidget):
             QLabel#compactLyric {{
                 color: {self._lyric_text_color};
             }}
+            QLabel#trackMeta {{
+                color: {self._lyric_text_color};
+            }}
+            QLabel#sectionTitle {{
+                color: {self._overlay_text_color};
+                font: 9pt "Segoe UI Semibold";
+                letter-spacing: 0.5px;
+                padding-bottom: 2px;
+            }}
             QLineEdit {{
                 background: rgba(255, 255, 255, 20);
                 border: 1px solid rgba(255, 255, 255, 30);
@@ -195,6 +276,33 @@ class OverlayWindow(QWidget):
                 color: {self._overlay_text_color};
                 padding: 6px 10px;
                 min-height: 32px;
+            }}
+            QComboBox, QFontComboBox, QSpinBox {{
+                background: rgba(255, 255, 255, 20);
+                border: 1px solid rgba(255, 255, 255, 30);
+                border-radius: 10px;
+                color: {self._overlay_text_color};
+                padding: 6px 10px;
+                min-height: 32px;
+            }}
+            QComboBox QAbstractItemView, QFontComboBox QAbstractItemView {{
+                background: #171717;
+                color: {self._overlay_text_color};
+                border: 1px solid rgba(255, 255, 255, 28);
+                selection-background-color: rgba(255, 255, 255, 20);
+                selection-color: {self._overlay_text_color};
+                outline: 0;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                background: rgba(255, 255, 255, 12);
+                border: none;
+                width: 18px;
+                margin: 2px;
+                border-radius: 6px;
+            }}
+            QSpinBox::up-arrow, QSpinBox::down-arrow {{
+                width: 0px;
+                height: 0px;
             }}
             QCheckBox {{
                 color: {self._overlay_text_color};
@@ -223,14 +331,17 @@ class OverlayWindow(QWidget):
         self.compact_label.setObjectName("compactLyric")
         self.compact_label.style().unpolish(self.compact_label)
         self.compact_label.style().polish(self.compact_label)
+        self.track_title_label.style().unpolish(self.track_title_label)
+        self.track_title_label.style().polish(self.track_title_label)
         self._lyric_glow.setColor(QColor(self._lyric_glow_color))
+        self._apply_text_preferences()
 
     def _create_input(self, placeholder: str) -> QLineEdit:
         widget = QLineEdit()
         widget.setPlaceholderText(placeholder)
         return widget
 
-    def _create_field(self, label_text: str, input_widget: QLineEdit) -> QWidget:
+    def _create_field(self, label_text: str, input_widget: QWidget) -> QWidget:
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -241,6 +352,11 @@ class OverlayWindow(QWidget):
         layout.addWidget(label)
         layout.addWidget(input_widget)
         return container
+
+    def _create_section_title(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("sectionTitle")
+        return label
 
     def _create_offset_field(self) -> QWidget:
         container = QWidget()
@@ -281,16 +397,28 @@ class OverlayWindow(QWidget):
         self.lyric_offset_input.setText(str(current_value + delta_ms))
 
     def load_config_values(self, config: AppConfig) -> None:
+        self._playback_source = config.playback_source or WINDOWS_PLAYBACK_SOURCE
         self.client_id_input.setText(config.spotify_client_id)
         self.client_secret_input.setText(config.spotify_client_secret)
         self.redirect_uri_input.setText(config.spotify_redirect_uri)
         self.lyric_offset_input.setText(str(config.lyric_offset_ms or 0))
+        self._lyric_font_family = config.lyric_font_family or "Segoe UI"
+        self._lyric_font_size = max(8, config.lyric_font_size or 11)
+        self._text_alignment = config.text_alignment or "left"
+        self.font_family_input.setCurrentFont(QFont(self._lyric_font_family))
+        self.font_size_input.setValue(self._lyric_font_size)
+        self._set_alignment_selection(self._text_alignment)
         self.overlay_color_input.setText(config.overlay_bg_color)
         self.text_color_input.setText(config.overlay_text_color)
         self.lyric_color_input.setText(config.lyric_text_color)
         self.glow_color_input.setText(config.lyric_glow_color)
         self.auto_save_lrc_checkbox.setChecked(config.auto_save_fetched_lrc)
+        self._show_settings_button = config.show_settings_button
+        self._show_hide_button = config.show_hide_button
+        self._sync_playback_source_ui()
+        self._sync_overlay_buttons_ui()
         self.apply_config_theme(config)
+        self._refresh_layout_after_settings_change()
 
     def current_form_config(self) -> AppConfig:
         try:
@@ -299,6 +427,7 @@ class OverlayWindow(QWidget):
             lyric_offset_ms = 0
 
         return AppConfig(
+            playback_source=self._playback_source,
             spotify_client_id=self.client_id_input.text().strip(),
             spotify_client_secret=self.client_secret_input.text().strip(),
             spotify_redirect_uri=self.redirect_uri_input.text().strip(),
@@ -310,6 +439,11 @@ class OverlayWindow(QWidget):
             overlay_text_color=self.text_color_input.text().strip() or "#F4F4F4",
             lyric_text_color=self.lyric_color_input.text().strip() or "#F4F4F4",
             lyric_glow_color=self.glow_color_input.text().strip() or "#66CCFFFF",
+            lyric_font_family=self.font_family_input.currentFont().family().strip() or "Segoe UI",
+            lyric_font_size=self.font_size_input.value(),
+            text_alignment=self.text_alignment_input.currentData(),
+            show_settings_button=self._show_settings_button,
+            show_hide_button=self._show_hide_button,
         )
 
     def apply_config_theme(self, config: AppConfig) -> None:
@@ -317,7 +451,24 @@ class OverlayWindow(QWidget):
         self._overlay_text_color = config.overlay_text_color or "#F4F4F4"
         self._lyric_text_color = config.lyric_text_color or "#F4F4F4"
         self._lyric_glow_color = config.lyric_glow_color or "#66CCFFFF"
+        self._lyric_font_family = config.lyric_font_family or "Segoe UI"
+        self._lyric_font_size = max(8, config.lyric_font_size or 11)
+        self._text_alignment = config.text_alignment or "left"
         self._apply_theme()
+
+    def set_playback_source(self, playback_source: str) -> None:
+        self._playback_source = playback_source or WINDOWS_PLAYBACK_SOURCE
+        self._sync_playback_source_ui()
+        self._refresh_layout_after_settings_change()
+
+    def playback_source(self) -> str:
+        return self._playback_source
+
+    def set_overlay_buttons_visibility(self, show_settings_button: bool, show_hide_button: bool) -> None:
+        self._show_settings_button = show_settings_button
+        self._show_hide_button = show_hide_button
+        self._sync_overlay_buttons_ui()
+        self._refresh_layout_after_settings_change()
 
     def show_status(self, message: str) -> None:
         new_status = message.strip()
@@ -338,13 +489,24 @@ class OverlayWindow(QWidget):
         self._expanded = not self._expanded
         self.settings_panel.setVisible(self._expanded)
         self.status_label.setVisible(bool(self._status_text) or self._expanded)
+        self._sync_playback_source_ui()
+        self._sync_overlay_buttons_ui()
         self._apply_window_mode()
+
+    def close_settings_panel(self) -> None:
+        if not self._expanded:
+            return
+        self.toggle_settings()
+
+    def reset_to_default_settings(self) -> None:
+        defaults = default_config()
+        self.load_config_values(defaults)
 
     def _emit_save(self) -> None:
         self.save_requested.emit(self.current_form_config())
 
     def trigger_reconnect_shortcut(self) -> None:
-        self.show_status("Spotify trying to reconnect...")
+        self.show_status("Spotify playback trying to reconnect...")
         QTimer.singleShot(0, self.reconnect_requested.emit)
 
     def toggle_lyric_color_shortcut(self) -> None:
@@ -436,6 +598,53 @@ class OverlayWindow(QWidget):
         self.track_title_label.setVisible(show_small_track)
         self.compact_label.setText(compact_text)
 
+    def _apply_text_preferences(self) -> None:
+        compact_font = QFont(self._lyric_font_family, self._lyric_font_size)
+        compact_font.setBold(True)
+        self.compact_label.setFont(compact_font)
+        self.compact_label.setMaximumHeight(16777215)
+        self.compact_label.setMinimumHeight(max(38, self.compact_label.sizeHint().height()))
+
+        meta_font = QFont(self._lyric_font_family, max(8, self._lyric_font_size - 3))
+        self.track_title_label.setFont(meta_font)
+        self.status_label.setFont(meta_font)
+
+        alignment = self._qt_alignment(self._text_alignment)
+        self.compact_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
+        self.track_title_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
+        self.status_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
+
+    def _set_alignment_selection(self, alignment: str) -> None:
+        for index in range(self.text_alignment_input.count()):
+            if self.text_alignment_input.itemData(index) == alignment:
+                self.text_alignment_input.setCurrentIndex(index)
+                return
+        self.text_alignment_input.setCurrentIndex(0)
+
+    def _qt_alignment(self, alignment: str) -> Qt.AlignmentFlag:
+        normalized = (alignment or "").strip().lower()
+        if normalized == "center":
+            return Qt.AlignmentFlag.AlignHCenter
+        if normalized == "right":
+            return Qt.AlignmentFlag.AlignRight
+        return Qt.AlignmentFlag.AlignLeft
+
+    def _sync_playback_source_ui(self) -> None:
+        show_oauth_fields = self._playback_source == SPOTIFY_API_PLAYBACK_SOURCE
+        self.credentials_section.setVisible(show_oauth_fields)
+        for field in self._oauth_fields:
+            field.setVisible(show_oauth_fields)
+
+    def _sync_overlay_buttons_ui(self) -> None:
+        self.settings_button.setVisible(self._show_settings_button or self._expanded)
+        self.close_button.setVisible(self._show_hide_button)
+
+    def _refresh_layout_after_settings_change(self) -> None:
+        if self._expanded:
+            self._apply_window_mode()
+            return
+        self._apply_window_mode_if_needed()
+
     def _apply_window_mode_if_layout_changed(
         self,
         previous_header_text: str,
@@ -455,9 +664,10 @@ class OverlayWindow(QWidget):
         self._apply_window_mode()
 
     def _apply_window_mode(self) -> None:
-        target_width = 640 if not self._expanded else 760
+        width_bonus = max(0, self._lyric_font_size - 11) * 16
+        target_width = (620 + width_bonus) if not self._expanded else (740 + width_bonus)
         if self._expanded:
-            target_height = 470
+            target_height = self._expanded_target_height(target_width)
         else:
             target_height = self._compact_target_height()
         target_size = (target_width, target_height)
@@ -465,8 +675,52 @@ class OverlayWindow(QWidget):
         if self._last_window_size == target_size:
             return
         self._last_window_size = target_size
+        if self._expanded and self.isVisible():
+            self._animate_window_resize(target_width, target_height)
+            return
+        self._resize_animation.stop()
         self.resize(target_width, target_height)
         self._reposition_after_resize()
+
+    def _expanded_target_height(self, target_width: int) -> int:
+        self.layout().activate()
+        outer_layout = self.layout()
+        outer_margins = outer_layout.contentsMargins()
+
+        card_widget = self.findChild(QWidget, "card")
+        if card_widget is None:
+            return 470
+
+        content_width = max(320, target_width - outer_margins.left() - outer_margins.right())
+        card_widget.setFixedWidth(content_width)
+        card_widget.layout().activate()
+        card_height = card_widget.sizeHint().height()
+        card_widget.setMinimumWidth(0)
+        card_widget.setMaximumWidth(16777215)
+
+        total_height = outer_margins.top() + outer_margins.bottom() + card_height
+        return max(76, total_height)
+
+    def _animate_window_resize(self, target_width: int, target_height: int) -> None:
+        current_geometry = self.geometry()
+        target_geometry = QRect(current_geometry)
+        target_geometry.setWidth(target_width)
+        target_geometry.setHeight(target_height)
+
+        if not self._user_positioned or self._snap_pos is None:
+            screen = self.screen() or QApplication.primaryScreen()
+            if screen is not None:
+                available = screen.availableGeometry()
+                target_geometry.moveLeft(available.x() + (available.width() - target_width) // 2)
+                target_geometry.moveTop(available.y() + 12)
+
+        if current_geometry == target_geometry:
+            return
+
+        self._resize_animation.stop()
+        self._resize_animation.setStartValue(current_geometry)
+        self._resize_animation.setEndValue(target_geometry)
+        self._resize_animation.start()
 
     def _compact_target_height(self) -> int:
         # Recalculate compact height only from visible compact-mode widgets.
@@ -557,6 +811,14 @@ class OverlayWindow(QWidget):
             return
         if event.key() == Qt.Key.Key_C and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.toggle_lyric_color_shortcut()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_S and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.toggle_settings()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_X and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.hide_to_tray()
             event.accept()
             return
         super().keyPressEvent(event)

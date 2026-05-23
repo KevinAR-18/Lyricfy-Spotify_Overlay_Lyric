@@ -51,11 +51,16 @@ TOKEN_CACHE = APP_DATA_DIR / ".spotify_cache"
 ENV_FILE = APP_DATA_DIR / ".env"
 FALLBACK_ENV_FILE = BASE_DIR / ".env"
 ICON_FILE = RESOURCE_DIR / "icon.ico"
+WINDOWS_PLAYBACK_SOURCE = "windows"
+SPOTIFY_API_PLAYBACK_SOURCE = "spotify_api"
+PLAYBACK_SOURCES = {WINDOWS_PLAYBACK_SOURCE, SPOTIFY_API_PLAYBACK_SOURCE}
+TEXT_ALIGNMENTS = {"left", "center", "right"}
 
 
 @dataclass(slots=True)
 class AppConfig:
     # Seluruh konfigurasi aplikasi yang dibaca dari / ditulis ke .env.
+    playback_source: str
     spotify_client_id: str
     spotify_client_secret: str
     spotify_redirect_uri: str
@@ -67,11 +72,17 @@ class AppConfig:
     overlay_text_color: str = "#F4F4F4"
     lyric_text_color: str = "#F4F4F4"
     lyric_glow_color: str = "#66CCFFFF"
+    lyric_font_family: str = "Segoe UI"
+    lyric_font_size: int = 11
+    text_alignment: str = "left"
+    show_settings_button: bool = True
+    show_hide_button: bool = True
 
 
 def default_config() -> AppConfig:
     # Nilai default dipakai saat .env belum ada.
     return AppConfig(
+        playback_source=WINDOWS_PLAYBACK_SOURCE,
         spotify_client_id="",
         spotify_client_secret="",
         spotify_redirect_uri="http://127.0.0.1:8888/callback",
@@ -83,6 +94,11 @@ def default_config() -> AppConfig:
         overlay_text_color="#F4F4F4",
         lyric_text_color="#F4F4F4",
         lyric_glow_color="#66CCFFFF",
+        lyric_font_family="Segoe UI",
+        lyric_font_size=11,
+        text_alignment="left",
+        show_settings_button=True,
+        show_hide_button=True,
     )
 
 
@@ -96,6 +112,9 @@ def load_config() -> AppConfig:
 
     # Semua nilai environment dikonversi ke AppConfig agar mudah dipakai modul lain.
     return AppConfig(
+        playback_source=_normalize_playback_source(
+            os.getenv("PLAYBACK_SOURCE", WINDOWS_PLAYBACK_SOURCE).strip().lower()
+        ),
         spotify_client_id=os.getenv("SPOTIFY_CLIENT_ID", "").strip(),
         spotify_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET", "").strip(),
         spotify_redirect_uri=os.getenv(
@@ -110,6 +129,11 @@ def load_config() -> AppConfig:
         overlay_text_color=os.getenv("OVERLAY_TEXT_COLOR", "#F4F4F4").strip() or "#F4F4F4",
         lyric_text_color=os.getenv("LYRIC_TEXT_COLOR", "#F4F4F4").strip() or "#F4F4F4",
         lyric_glow_color=os.getenv("LYRIC_GLOW_COLOR", "#66CCFFFF").strip() or "#66CCFFFF",
+        lyric_font_family=os.getenv("LYRIC_FONT_FAMILY", "Segoe UI").strip() or "Segoe UI",
+        lyric_font_size=int(os.getenv("LYRIC_FONT_SIZE", "11")),
+        text_alignment=_normalize_text_alignment(os.getenv("TEXT_ALIGNMENT", "left")),
+        show_settings_button=os.getenv("SHOW_SETTINGS_BUTTON", "true").lower() == "true",
+        show_hide_button=os.getenv("SHOW_HIDE_BUTTON", "true").lower() == "true",
     )
 
 
@@ -135,9 +159,24 @@ def ensure_env_file() -> None:
     save_config(default_config())
 
 
+def _normalize_playback_source(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in PLAYBACK_SOURCES:
+        return normalized
+    return WINDOWS_PLAYBACK_SOURCE
+
+
+def _normalize_text_alignment(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in TEXT_ALIGNMENTS:
+        return normalized
+    return "left"
+
+
 def save_config(config: AppConfig) -> None:
     # Simpan ulang seluruh konfigurasi ke format .env sederhana key=value.
     lines = [
+        f"PLAYBACK_SOURCE={_normalize_playback_source(config.playback_source)}",
         f"SPOTIFY_CLIENT_ID={config.spotify_client_id}",
         f"SPOTIFY_CLIENT_SECRET={config.spotify_client_secret}",
         f"SPOTIFY_REDIRECT_URI={config.spotify_redirect_uri}",
@@ -149,5 +188,10 @@ def save_config(config: AppConfig) -> None:
         f"OVERLAY_TEXT_COLOR={config.overlay_text_color}",
         f"LYRIC_TEXT_COLOR={config.lyric_text_color}",
         f"LYRIC_GLOW_COLOR={config.lyric_glow_color}",
+        f"LYRIC_FONT_FAMILY={config.lyric_font_family}",
+        f"LYRIC_FONT_SIZE={config.lyric_font_size}",
+        f"TEXT_ALIGNMENT={_normalize_text_alignment(config.text_alignment)}",
+        f"SHOW_SETTINGS_BUTTON={'true' if config.show_settings_button else 'false'}",
+        f"SHOW_HIDE_BUTTON={'true' if config.show_hide_button else 'false'}",
     ]
     ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
