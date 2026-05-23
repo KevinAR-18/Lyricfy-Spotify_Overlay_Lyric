@@ -26,6 +26,19 @@ from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE, WINDOWS_PLAYBACK_SOU
 from .models import TrackInfo
 
 
+def shortcuts_guide_lines() -> list[tuple[str, str]]:
+    return [
+        ("Ctrl+R", "Reload playback"),
+        ("Shift+C", "Toggle lyric color"),
+        ("Shift+S", "Open or close settings"),
+        ("Shift+X", "Hide overlay to tray"),
+    ]
+
+
+def shortcuts_guide_text() -> str:
+    return "\n".join(f"{shortcut}  {description}" for shortcut, description in shortcuts_guide_lines())
+
+
 class OverlayWindow(QWidget):
     save_requested = Signal(object)
     reconnect_requested = Signal()
@@ -151,6 +164,9 @@ class OverlayWindow(QWidget):
         self.lyric_color_input = self._create_input("Example: #F4F4F4")
         self.glow_color_input = self._create_input("Example: #66CCFFFF")
         self.auto_save_lrc_checkbox = QCheckBox("Save fetched lyrics as local .lrc cache")
+        self.shortcuts_label = QLabel(shortcuts_guide_text())
+        self.shortcuts_label.setObjectName("shortcutsGuide")
+        self.shortcuts_label.setWordWrap(True)
 
         settings_actions = QHBoxLayout()
         settings_actions.setSpacing(8)
@@ -205,6 +221,8 @@ class OverlayWindow(QWidget):
         right_column.addWidget(self._create_field("Lyric Color", self.lyric_color_input))
         right_column.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
         right_column.addWidget(self.auto_save_lrc_checkbox)
+        right_column.addWidget(self._create_section_title("Shortcuts"))
+        right_column.addWidget(self.shortcuts_label)
         right_column.addStretch(1)
 
         credentials_layout = QVBoxLayout()
@@ -268,6 +286,14 @@ class OverlayWindow(QWidget):
                 font: 9pt "Segoe UI Semibold";
                 letter-spacing: 0.5px;
                 padding-bottom: 2px;
+            }}
+            QLabel#shortcutsGuide {{
+                color: {self._overlay_text_color};
+                background: rgba(255, 255, 255, 10);
+                border: 1px solid rgba(255, 255, 255, 18);
+                border-radius: 12px;
+                padding: 8px 10px;
+                font: 9pt "Segoe UI";
             }}
             QLineEdit {{
                 background: rgba(255, 255, 255, 20);

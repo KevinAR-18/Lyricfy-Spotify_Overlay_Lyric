@@ -14,14 +14,16 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Draggable overlay with snap-back behavior near the last saved position
 - System tray controls for show, hide, settings, and exit
 - System tray playback mode switch between `Non-API` and `API`
-- In-app settings for Spotify credentials, redirect URI, lyric offset, and colors
-- Windows local playback mode by default, without Spotify Developer credentials
+- In-app settings for Spotify credentials, redirect URI, lyric offset, alignment, font, and colors
+- Windows local playback mode by default on startup, without Spotify Developer credentials
 - Auto-created `.env` file on first launch
 - Separate Spotify token cache for packaged builds
 - Automatic `.lrc` cache for lyrics fetched from LRCLIB
 - Faster first window open by connecting to Spotify after the overlay is shown
 - Displays `Fetching lyrics...` while lyric lookup is still in progress
 - `Shift+C` shortcut to toggle lyric color quickly
+- `Shift+S` shortcut to open or close settings quickly
+- `Shift+X` shortcut to hide the overlay to tray quickly
 - `Ctrl+R` shortcut to reload Spotify connection quickly
 
 ## Quick Start
@@ -125,6 +127,11 @@ OVERLAY_BG_COLOR=#0A0A0AEB
 OVERLAY_TEXT_COLOR=#F4F4F4
 LYRIC_TEXT_COLOR=#F4F4F4
 LYRIC_GLOW_COLOR=#66CCFFFF
+LYRIC_FONT_FAMILY=Segoe UI
+LYRIC_FONT_SIZE=11
+TEXT_ALIGNMENT=left
+SHOW_SETTINGS_BUTTON=true
+SHOW_HIDE_BUTTON=true
 ```
 
 Important runtime files:
@@ -161,7 +168,10 @@ The built-in settings panel supports:
 - Lyric Color
 - Lyric Glow Color
 - Auto-save fetched LRCLIB lyrics as local `.lrc` cache
+- Shortcut guide
+- Reset Default
 - Clear downloaded lyric cache
+- Close Settings
 
 Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl+R` to reconnect with the latest credentials.
 
@@ -177,6 +187,7 @@ You can also change the mode from the tray menu:
 - `Open Settings`
 - `Mode` -> `Non-API` or `API`
 - `Overlay Buttons` -> show or hide the `Settings` and `Hide` buttons on the overlay
+- `Lyricfy v1.2.0`
 
 Recommended value:
 
@@ -251,6 +262,7 @@ The build script packages the app as a one-file windowed executable and includes
 - Closing the overlay hides it to the system tray instead of exiting
 - Hiding the overlay pauses Spotify polling until the overlay is shown again
 - The tray icon remains available for reopening settings or exiting the app
+- The app starts in `Non-API` mode by default unless you explicitly saved `API` mode in `.env`
 - If lyrics are available, the main line shows the current lyric and the second line shows `Title - Artist` briefly at the start of the song
 - If lyrics are not available yet, the main line shows the track title and the second line shows the artist
 - While lyric lookup is still running or retrying, the overlay shows `Fetching lyrics...`
@@ -261,6 +273,8 @@ The build script packages the app as a one-file windowed executable and includes
 ## Keyboard Shortcuts
 
 - `Shift+C` toggles the lyric color mode quickly
+- `Shift+S` opens or closes the settings panel
+- `Shift+X` hides the overlay to the system tray
 - `Ctrl+R` reloads the Spotify connection without opening settings
 
 ## Notes

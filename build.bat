@@ -1,8 +1,9 @@
 @echo off
 setlocal
+set VERSION=v1.2.0
 
 echo ========================================
-echo Building Lyricfy...
+echo Building Lyricfy %VERSION%...
 echo ========================================
 echo.
 
@@ -62,7 +63,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo ========================================
-echo Build complete
+echo Build complete: Lyricfy %VERSION%
 echo Output: dist\Lyricfy.exe
 echo Icon: dist\icon.ico
 echo ========================================
