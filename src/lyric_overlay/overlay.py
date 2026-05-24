@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 
 from PySide6.QtCore import QEasingCurve, QRect, QPropertyAnimation, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -31,7 +31,7 @@ def shortcuts_guide_lines() -> list[tuple[str, str]]:
         ("Ctrl+R", "Reload playback"),
         ("Shift+C", "Toggle lyric color"),
         ("Shift+S", "Open or close settings"),
-        ("Shift+X", "Hide overlay to tray"),
+        ("Shift+F", "Hide overlay to tray"),
     ]
 
 
@@ -51,6 +51,7 @@ class OverlayWindow(QWidget):
     _DARK_LYRIC_COLOR = "#1A1A1A"
     _HEADER_VISIBLE_DURATION_SECONDS = 7.0
     _NO_LYRICS_NOTICE_SECONDS = 4.0
+    _COMPACT_MIN_HEIGHT = 60
 
     def __init__(self) -> None:
         super().__init__()
@@ -82,6 +83,9 @@ class OverlayWindow(QWidget):
         self._resize_animation = QPropertyAnimation(self, b"geometry", self)
         self._resize_animation.setDuration(180)
         self._resize_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._transient_refresh_timer = QTimer(self)
+        self._transient_refresh_timer.setSingleShot(True)
+        self._transient_refresh_timer.timeout.connect(self._refresh_timed_overlay_state)
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -93,8 +97,8 @@ class OverlayWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumSize(620, 72)
-        self.resize(620, 72)
+        self.setMinimumSize(620, self._COMPACT_MIN_HEIGHT)
+        self.resize(620, self._COMPACT_MIN_HEIGHT)
 
         root = QWidget(self)
         root.setObjectName("card")
@@ -247,6 +251,7 @@ class OverlayWindow(QWidget):
         settings_layout.addLayout(content_grid)
         settings_layout.addWidget(self.credentials_section)
         settings_layout.addLayout(settings_actions)
+        self.settings_panel.setMaximumHeight(0)
         self.settings_panel.hide()
 
         card_layout.addLayout(header_layout)
@@ -513,10 +518,19 @@ class OverlayWindow(QWidget):
 
     def toggle_settings(self) -> None:
         self._expanded = not self._expanded
-        self.settings_panel.setVisible(self._expanded)
+        if self._expanded:
+            self.settings_panel.setMaximumHeight(16777215)
+            self.settings_panel.show()
+        else:
+            self.settings_panel.hide()
+            self.settings_panel.setMaximumHeight(0)
         self.status_label.setVisible(bool(self._status_text) or self._expanded)
         self._sync_playback_source_ui()
         self._sync_overlay_buttons_ui()
+        if self.layout() is not None:
+            self.layout().invalidate()
+            self.layout().activate()
+        self._last_window_size = None
         self._apply_window_mode()
 
     def close_settings_panel(self) -> None:
@@ -548,6 +562,7 @@ class OverlayWindow(QWidget):
         self.lyric_color_toggle_requested.emit(next_color)
 
     def set_track(self, track: TrackInfo | None, lyrics_source: str = "") -> None:
+        previous_compact_text = self.compact_label.text()
         previous_header_visible = self.track_title_label.isVisible()
         previous_header_text = self.track_title_label.text()
         normalized_source = (lyrics_source or "").strip().lower()
@@ -555,17 +570,28 @@ class OverlayWindow(QWidget):
         if track is None:
             self._track_text = "Spotify is not playing"
             self._artist_text = "Waiting for playback"
+            self._current_line_text = ""
             self._lyrics_available = False
             self._header_visible_until = 0.0
             self._no_lyrics_notice_until = 0.0
             self._refresh_compact_text()
-            self._apply_window_mode_if_layout_changed(previous_header_text, previous_header_visible)
+            self._apply_window_mode_if_layout_changed(
+                previous_compact_text,
+                previous_header_text,
+                previous_header_visible,
+            )
             return
 
         previous_title = self._track_text
         previous_artist = self._artist_text
         self._track_text = track.title
         self._artist_text = track.artist
+        if (
+            self._track_text != previous_title
+            or self._artist_text != previous_artist
+            or not self._lyrics_available
+        ):
+            self._current_line_text = ""
         if self._lyrics_available and (
             self._track_text != previous_title or self._artist_text != previous_artist
         ):
@@ -575,7 +601,11 @@ class OverlayWindow(QWidget):
         elif not self._lyrics_available:
             self._header_visible_until = 0.0
         self._refresh_compact_text()
-        self._apply_window_mode_if_layout_changed(previous_header_text, previous_header_visible)
+        self._apply_window_mode_if_layout_changed(
+            previous_compact_text,
+            previous_header_text,
+            previous_header_visible,
+        )
 
     def set_lines(self, current_line: str, next_line: str) -> None:
         previous_compact_text = self.compact_label.text()
@@ -603,7 +633,7 @@ class OverlayWindow(QWidget):
         self._refresh_compact_text()
         self._apply_window_mode_if_needed()
 
-    def _refresh_compact_text(self) -> None:
+    def _refresh_compact_text(self, *, compact_width: int | None = None) -> None:
         title_text = self._track_text.strip()
         artist_text = self._artist_text.strip()
         if self._current_line_text:
@@ -620,16 +650,20 @@ class OverlayWindow(QWidget):
             header_text = artist_text
             show_small_track = bool(header_text)
 
-        self.track_title_label.setText(header_text)
+        self.track_title_label.setText(
+            self._elide_label_text(self.track_title_label, header_text, available_width=compact_width)
+        )
         self.track_title_label.setVisible(show_small_track)
-        self.compact_label.setText(compact_text)
+        self.compact_label.setText(self._format_compact_text(compact_text, available_width=compact_width))
+        self._schedule_transient_refresh()
 
     def _apply_text_preferences(self) -> None:
         compact_font = QFont(self._lyric_font_family, self._lyric_font_size)
         compact_font.setBold(True)
         self.compact_label.setFont(compact_font)
-        self.compact_label.setMaximumHeight(16777215)
-        self.compact_label.setMinimumHeight(max(38, self.compact_label.sizeHint().height()))
+        line_height = self.compact_label.fontMetrics().lineSpacing()
+        self.compact_label.setMaximumHeight(max(40, line_height * 2 + 6))
+        self.compact_label.setMinimumHeight(max(32, line_height + 4))
 
         meta_font = QFont(self._lyric_font_family, max(8, self._lyric_font_size - 3))
         self.track_title_label.setFont(meta_font)
@@ -639,6 +673,58 @@ class OverlayWindow(QWidget):
         self.compact_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
         self.track_title_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
         self.status_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
+        self._refresh_compact_text()
+
+    def _elide_label_text(
+        self,
+        label: QLabel,
+        text: str,
+        *,
+        available_width: int | None = None,
+    ) -> str:
+        if not text:
+            return ""
+        target_width = available_width
+        if target_width is None:
+            target_width = label.width() or label.sizeHint().width() or label.minimumWidth()
+        target_width = max(120, target_width)
+        metrics = QFontMetrics(label.font())
+        return metrics.elidedText(text, Qt.TextElideMode.ElideRight, target_width)
+
+    def _format_compact_text(self, text: str, *, available_width: int | None = None) -> str:
+        normalized = " ".join(text.split())
+        if not normalized:
+            return ""
+
+        if available_width is None:
+            available_width = self.compact_label.width() or self.compact_label.minimumWidth()
+        available_width = max(180, available_width)
+        metrics = QFontMetrics(self.compact_label.font())
+        if metrics.horizontalAdvance(normalized) <= available_width:
+            return normalized
+
+        words = normalized.split(" ")
+        first_line_words: list[str] = []
+        second_line_words: list[str] = []
+
+        for word in words:
+            candidate = " ".join(first_line_words + [word]).strip()
+            if not first_line_words and metrics.horizontalAdvance(word) > available_width:
+                first_line_words.append(metrics.elidedText(word, Qt.TextElideMode.ElideRight, available_width))
+                second_line_words.extend(words[1:])
+                break
+            if not first_line_words or metrics.horizontalAdvance(candidate) <= available_width:
+                first_line_words.append(word)
+                continue
+            second_line_words.append(word)
+
+        first_line = " ".join(first_line_words).strip()
+        if not second_line_words:
+            return metrics.elidedText(first_line, Qt.TextElideMode.ElideRight, available_width)
+
+        remaining = " ".join(second_line_words).strip()
+        second_line = metrics.elidedText(remaining, Qt.TextElideMode.ElideRight, available_width)
+        return f"{first_line}\n{second_line}"
 
     def _set_alignment_selection(self, alignment: str) -> None:
         for index in range(self.text_alignment_input.count()):
@@ -673,13 +759,15 @@ class OverlayWindow(QWidget):
 
     def _apply_window_mode_if_layout_changed(
         self,
+        previous_compact_text: str,
         previous_header_text: str,
         previous_header_visible: bool,
     ) -> None:
         if self._expanded:
             return
         if (
-            self.track_title_label.text() != previous_header_text
+            self.compact_label.text() != previous_compact_text
+            or self.track_title_label.text() != previous_header_text
             or self.track_title_label.isVisible() != previous_header_visible
         ):
             self._apply_window_mode()
@@ -689,15 +777,56 @@ class OverlayWindow(QWidget):
             return
         self._apply_window_mode()
 
+    def _compact_text_width_for_window(self, target_width: int) -> int:
+        outer_layout = self.layout()
+        outer_margins = outer_layout.contentsMargins() if outer_layout is not None else self.contentsMargins()
+        card_widget = self.findChild(QWidget, "card")
+        card_layout = card_widget.layout() if card_widget is not None else None
+        card_margins = card_layout.contentsMargins() if card_layout is not None else outer_margins
+        content_width = max(320, target_width - outer_margins.left() - outer_margins.right())
+        card_width = max(280, content_width - card_margins.left() - card_margins.right())
+        button_width = 64 if not self._expanded else 0
+        return max(180, card_width - button_width)
+
+    def _schedule_transient_refresh(self) -> None:
+        deadlines = []
+        now = time.monotonic()
+        if self._header_visible_until > now:
+            deadlines.append(self._header_visible_until)
+        if self._no_lyrics_notice_until > now:
+            deadlines.append(self._no_lyrics_notice_until)
+
+        if not deadlines:
+            self._transient_refresh_timer.stop()
+            return
+
+        delay_ms = max(50, int((min(deadlines) - now) * 1000) + 10)
+        self._transient_refresh_timer.start(delay_ms)
+
+    def _refresh_timed_overlay_state(self) -> None:
+        previous_compact_text = self.compact_label.text()
+        previous_header_text = self.track_title_label.text()
+        previous_header_visible = self.track_title_label.isVisible()
+        self._refresh_compact_text()
+        if self._expanded:
+            return
+        if (
+            self.track_title_label.text() != previous_header_text
+            or self.track_title_label.isVisible() != previous_header_visible
+            or self.compact_label.text() != previous_compact_text
+        ):
+            self._apply_window_mode()
+
     def _apply_window_mode(self) -> None:
         width_bonus = max(0, self._lyric_font_size - 11) * 16
         target_width = (620 + width_bonus) if not self._expanded else (740 + width_bonus)
         if self._expanded:
             target_height = self._expanded_target_height(target_width)
         else:
-            target_height = self._compact_target_height()
+            self._refresh_compact_text(compact_width=self._compact_text_width_for_window(target_width))
+            target_height = self._compact_target_height(target_width)
         target_size = (target_width, target_height)
-        self.setMinimumSize(target_width, 76)
+        self.setMinimumSize(target_width, self._COMPACT_MIN_HEIGHT)
         if self._last_window_size == target_size:
             return
         self._last_window_size = target_size
@@ -748,7 +877,7 @@ class OverlayWindow(QWidget):
         self._resize_animation.setEndValue(target_geometry)
         self._resize_animation.start()
 
-    def _compact_target_height(self) -> int:
+    def _compact_target_height(self, target_width: int) -> int:
         # Recalculate compact height only from visible compact-mode widgets.
         self.layout().activate()
 
@@ -761,7 +890,7 @@ class OverlayWindow(QWidget):
         card_margins = card_layout.contentsMargins() if card_layout is not None else outer_margins
         spacing = card_layout.spacing() if card_layout is not None else 0
 
-        content_width = max(320, self.width() - outer_margins.left() - outer_margins.right())
+        content_width = max(320, target_width - outer_margins.left() - outer_margins.right())
         card_width = max(280, content_width - card_margins.left() - card_margins.right())
         compact_width = max(240, card_width - 64)
 
@@ -780,7 +909,7 @@ class OverlayWindow(QWidget):
         if visible_extra_heights:
             total += spacing * len(visible_extra_heights) + sum(visible_extra_heights)
 
-        return max(76, total)
+        return max(self._COMPACT_MIN_HEIGHT, total)
 
     def _position_top_center(self) -> None:
         screen = self.screen() or QApplication.primaryScreen()
@@ -805,6 +934,10 @@ class OverlayWindow(QWidget):
         if not self._initial_positioned:
             self._apply_window_mode()
             self._initial_positioned = True
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_compact_text()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
@@ -843,7 +976,7 @@ class OverlayWindow(QWidget):
             self.toggle_settings()
             event.accept()
             return
-        if event.key() == Qt.Key.Key_X and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+        if event.key() == Qt.Key.Key_F and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.hide_to_tray()
             event.accept()
             return
