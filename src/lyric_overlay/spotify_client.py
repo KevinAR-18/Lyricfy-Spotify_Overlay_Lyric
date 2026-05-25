@@ -17,6 +17,13 @@ SPOTIFY_SCOPES = "user-read-currently-playing user-read-playback-state"
 RATE_LIMIT_COOLDOWN_SECONDS = 60
 
 
+def stable_windows_track_id(source_app: str, artist: str, title: str, duration_ms: int) -> str:
+    normalized_artist = " ".join(artist.casefold().split())
+    normalized_title = " ".join(title.casefold().split())
+    duration_seconds = round(duration_ms / 1000) if duration_ms > 0 else 0
+    return f"{source_app}:{normalized_artist}:{normalized_title}:{duration_seconds}"
+
+
 class PlaybackClient(Protocol):
     def get_current_track(self) -> TrackInfo | None:
         ...
@@ -73,7 +80,12 @@ class WindowsMediaSpotifyClient:
         source_app = (session.source_app_user_model_id or "").strip() or "Spotify.exe"
 
         return TrackInfo(
-            track_id=f"{source_app}:{artist}:{title}:{duration_ms}",
+            track_id=stable_windows_track_id(
+                source_app=source_app,
+                artist=artist,
+                title=title,
+                duration_ms=duration_ms,
+            ),
             title=title,
             artist=artist or "Unknown artist",
             album=(media.album_title or "").strip(),

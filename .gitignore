@@ -13,7 +13,8 @@ dist/
 *.ifp
 
 Lyricfy.spec
-.spotify_cache
+*.spotify_cache
 .spotify_cache
 .spotify_cache
 release-*.txt
+

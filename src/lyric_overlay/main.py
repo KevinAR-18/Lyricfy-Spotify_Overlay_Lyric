@@ -156,7 +156,7 @@ def main() -> int:
         show_hide_button_action.setCheckable(True)
         overlay_buttons_menu.addAction(show_settings_button_action)
         overlay_buttons_menu.addAction(show_hide_button_action)
-        signature_action = QAction("Lyricfy v1.2.0", tray_menu)
+        signature_action = QAction("Lyricfy v1.2.1", tray_menu)
         signature_action.setEnabled(False)
         exit_action = QAction("Exit", tray_menu)
         tray_menu.addAction(show_action)

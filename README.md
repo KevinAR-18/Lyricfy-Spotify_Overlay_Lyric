@@ -187,7 +187,7 @@ You can also change the mode from the tray menu:
 - `Open Settings`
 - `Mode` -> `Non-API` or `API`
 - `Overlay Buttons` -> show or hide the `Settings` and `Hide` buttons on the overlay
-- `Lyricfy v1.2.0`
+- `Lyricfy v1.2.1`
 
 Recommended value:
 

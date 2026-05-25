@@ -11,10 +11,26 @@ from .models import LyricLine, LyricsData
 
 TIMESTAMP_RE = re.compile(r"\[(\d{2}):(\d{2})(?:[.:](\d{2,3}))?\]")
 LRCLIB_TIMEOUT_SECONDS = 5
+LOCAL_LRC_SEPARATOR = " - "
 
 
 def sanitize_filename(value: str) -> str:
     return re.sub(r'[<>:"/\\|?*]', "", value).strip()
+
+
+def normalize_match_text(value: str) -> str:
+    normalized = value.casefold()
+    normalized = re.sub(r"[^\w\s]+", " ", normalized)
+    return " ".join(normalized.split())
+
+
+def artist_parts(value: str) -> set[str]:
+    parts = re.split(
+        r"\s*(?:,|&|\+|;|\bfeat\.?\b|\bfeaturing\b|\bwith\b|/)\s*",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return {normalized for part in parts if (normalized := normalize_match_text(part))}
 
 
 def debug_log(message: str) -> None:
@@ -193,7 +209,81 @@ class LyricsRepository:
 
     def _local_lrc_paths(self, artist: str, title: str) -> list[Path]:
         filename = f"{sanitize_filename(artist)} - {sanitize_filename(title)}.lrc"
-        return [LRC_DIR / filename, FETCHED_LRC_DIR / filename]
+        exact_paths = [LRC_DIR / filename, FETCHED_LRC_DIR / filename]
+        paths = list(exact_paths)
+        seen = {path.resolve() for path in exact_paths if path.exists()}
+
+        for path in self._matching_local_lrc_paths(artist=artist, title=title):
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            paths.append(path)
+            seen.add(resolved)
+
+        return paths
+
+    def _matching_local_lrc_paths(self, artist: str, title: str) -> list[Path]:
+        requested_artist = normalize_match_text(artist)
+        requested_title = normalize_match_text(title)
+        requested_artist_parts = artist_parts(artist)
+        matches: list[tuple[int, str, Path]] = []
+
+        if not requested_title:
+            return []
+
+        for directory in (LRC_DIR, FETCHED_LRC_DIR):
+            try:
+                files = list(directory.glob("*.lrc"))
+            except OSError:
+                continue
+
+            for path in files:
+                stem = path.stem
+                if LOCAL_LRC_SEPARATOR not in stem:
+                    continue
+
+                file_artist, file_title = stem.split(LOCAL_LRC_SEPARATOR, 1)
+                normalized_file_artist = normalize_match_text(file_artist)
+                normalized_file_title = normalize_match_text(file_title)
+                score = self._local_lrc_match_score(
+                    requested_artist=requested_artist,
+                    requested_artist_parts=requested_artist_parts,
+                    requested_title=requested_title,
+                    file_artist=normalized_file_artist,
+                    file_artist_parts=artist_parts(file_artist),
+                    file_title=normalized_file_title,
+                )
+                if score <= 0:
+                    continue
+
+                matches.append((score, path.name.casefold(), path))
+
+        matches.sort(key=lambda match: (-match[0], match[1]))
+        return [path for _, _, path in matches]
+
+    @staticmethod
+    def _local_lrc_match_score(
+        requested_artist: str,
+        requested_artist_parts: set[str],
+        requested_title: str,
+        file_artist: str,
+        file_artist_parts: set[str],
+        file_title: str,
+    ) -> int:
+        if requested_title != file_title:
+            return 0
+
+        if requested_artist == file_artist:
+            return 100
+
+        if requested_artist and file_artist:
+            if requested_artist in file_artist or file_artist in requested_artist:
+                return 90
+
+        if requested_artist_parts and file_artist_parts and requested_artist_parts & file_artist_parts:
+            return 80
+
+        return 0
 
     def _save_fetched_lrc(self, artist: str, title: str, text: str) -> None:
         path = FETCHED_LRC_DIR / f"{sanitize_filename(artist)} - {sanitize_filename(title)}.lrc"
