@@ -17,4 +17,5 @@ Lyricfy.spec
 .spotify_cache
 .spotify_cache
 release-*.txt
-
+release_notes_*.txt
+release_notes*.txt
