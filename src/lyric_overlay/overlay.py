@@ -8,13 +8,13 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
     QFontComboBox,
     QGraphicsDropShadowEffect,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -544,14 +544,85 @@ class OverlayWindow(QWidget):
         self.load_config_values(defaults)
 
     def confirm_clear_downloaded_lyrics(self) -> None:
-        result = QMessageBox.question(
-            self,
-            "Clear Downloaded Lyrics?",
-            "Delete all downloaded lyric cache files?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Clear Downloaded Lyrics")
+        dialog.setModal(True)
+        dialog.setFixedWidth(360)
+        dialog.setObjectName("confirmDialog")
+        dialog.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        title = QLabel("Clear downloaded lyrics?")
+        title.setObjectName("confirmTitle")
+
+        message = QLabel("This will delete all saved .lrc cache files. Downloaded lyrics can be fetched again later.")
+        message.setObjectName("confirmMessage")
+        message.setWordWrap(True)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 4, 0, 0)
+        actions.setSpacing(8)
+
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(dialog.reject)
+
+        delete_button = QPushButton("Delete")
+        delete_button.setObjectName("dangerButton")
+        delete_button.clicked.connect(dialog.accept)
+
+        actions.addStretch(1)
+        actions.addWidget(cancel_button)
+        actions.addWidget(delete_button)
+
+        layout.addWidget(title)
+        layout.addWidget(message)
+        layout.addLayout(actions)
+
+        dialog.setStyleSheet(
+            f"""
+            QDialog#confirmDialog {{
+                background: {self._overlay_bg_color};
+                border: 1px solid rgba(255, 255, 255, 28);
+                border-radius: 18px;
+            }}
+            QLabel {{
+                color: {self._overlay_text_color};
+                background: transparent;
+            }}
+            QLabel#confirmTitle {{
+                font: 11pt "Segoe UI Semibold";
+            }}
+            QLabel#confirmMessage {{
+                color: rgba(244, 244, 244, 190);
+                font: 9pt "Segoe UI";
+                line-height: 130%;
+            }}
+            QPushButton {{
+                background: rgba(255, 255, 255, 20);
+                border: 1px solid rgba(255, 255, 255, 28);
+                border-radius: 10px;
+                color: {self._overlay_text_color};
+                min-height: 34px;
+                min-width: 82px;
+                padding: 6px 12px;
+            }}
+            QPushButton#dangerButton {{
+                background: rgba(255, 92, 92, 58);
+                border: 1px solid rgba(255, 130, 130, 92);
+            }}
+            QPushButton:hover {{
+                background: rgba(255, 255, 255, 32);
+            }}
+            QPushButton#dangerButton:hover {{
+                background: rgba(255, 92, 92, 78);
+            }}
+            """
         )
-        if result == QMessageBox.StandardButton.Yes:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.clear_lyrics_cache_requested.emit()
 
     def _emit_save(self) -> None:
