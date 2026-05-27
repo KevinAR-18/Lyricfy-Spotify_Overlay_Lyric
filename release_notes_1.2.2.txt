@@ -1,0 +1,16 @@
+Lyricfy v1.2.2 Release Notes
+
+Highlights
+- Faster app launch in the default Non-API playback mode by lazy-loading Spotify API dependencies only when API mode is used.
+- Safer downloaded lyric cache clearing with a custom confirmation dialog before deleting .lrc cache files.
+- Updated app version display in the tray menu and build script to v1.2.2.
+
+Improvements
+- The Clear Downloaded Lyrics action now opens a Lyricfy-styled confirmation popup instead of the default system dialog.
+- The confirmation popup has a darker surface, stronger outline, drop shadow, and can be dragged around.
+- Spotify API imports are deferred, so spotipy is not loaded during startup when using Windows/Non-API playback.
+
+Notes
+- The existing build.bat flow is still used.
+- Downloaded lyrics are only deleted after confirming the popup.
+- Local lyric cache and runtime data are still stored in the same locations as before.
