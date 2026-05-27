@@ -5,10 +5,6 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-import spotipy
-from spotipy import SpotifyException
-from spotipy.oauth2 import SpotifyOAuth
-
 from .config import SPOTIFY_API_PLAYBACK_SOURCE, TOKEN_CACHE, WINDOWS_PLAYBACK_SOURCE
 from .models import TrackInfo
 
@@ -134,6 +130,10 @@ class SpotifyApiClient:
         if not client_id or not client_secret or not redirect_uri:
             raise ValueError("Spotify credentials are incomplete in .env")
 
+        import spotipy
+        from spotipy import SpotifyException
+        from spotipy.oauth2 import SpotifyOAuth
+
         auth_manager = SpotifyOAuth(
             client_id=client_id,
             client_secret=client_secret,
@@ -150,6 +150,7 @@ class SpotifyApiClient:
             backoff_factor=0,
             status_forcelist=(),
         )
+        self._spotify_exception = SpotifyException
         self._rate_limited_until = 0.0
 
     def get_current_track(self) -> TrackInfo | None:
@@ -161,7 +162,7 @@ class SpotifyApiClient:
 
         try:
             payload = self._spotify.current_user_playing_track()
-        except SpotifyException as exc:
+        except self._spotify_exception as exc:
             if exc.http_status == 429:
                 self._rate_limited_until = time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS
                 raise RuntimeError(

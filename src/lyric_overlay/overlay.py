@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -182,7 +183,7 @@ class OverlayWindow(QWidget):
         self.reconnect_button.clicked.connect(self.trigger_reconnect_shortcut)
 
         self.clear_cache_button = QPushButton("Clear Downloaded Lyrics")
-        self.clear_cache_button.clicked.connect(self.clear_lyrics_cache_requested.emit)
+        self.clear_cache_button.clicked.connect(self.confirm_clear_downloaded_lyrics)
 
         self.reset_defaults_button = QPushButton("Reset Default")
         self.reset_defaults_button.clicked.connect(self.reset_to_default_settings)
@@ -541,6 +542,17 @@ class OverlayWindow(QWidget):
     def reset_to_default_settings(self) -> None:
         defaults = default_config()
         self.load_config_values(defaults)
+
+    def confirm_clear_downloaded_lyrics(self) -> None:
+        result = QMessageBox.question(
+            self,
+            "Clear Downloaded Lyrics?",
+            "Delete all downloaded lyric cache files?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if result == QMessageBox.StandardButton.Yes:
+            self.clear_lyrics_cache_requested.emit()
 
     def _emit_save(self) -> None:
         self.save_requested.emit(self.current_form_config())
