@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QEasingCurve, QRect, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QPoint, QRect, QPropertyAnimation, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
@@ -552,6 +552,21 @@ class OverlayWindow(QWidget):
         dialog.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
+        drag_offset = {"value": QPoint()}
+
+        def start_drag(event) -> None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                drag_offset["value"] = event.globalPosition().toPoint() - dialog.frameGeometry().topLeft()
+                event.accept()
+
+        def move_drag(event) -> None:
+            if event.buttons() & Qt.MouseButton.LeftButton:
+                dialog.move(event.globalPosition().toPoint() - drag_offset["value"])
+                event.accept()
+
+        dialog.mousePressEvent = start_drag
+        dialog.mouseMoveEvent = move_drag
+
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(12)
@@ -585,8 +600,8 @@ class OverlayWindow(QWidget):
         dialog.setStyleSheet(
             f"""
             QDialog#confirmDialog {{
-                background: {self._overlay_bg_color};
-                border: 1px solid rgba(255, 255, 255, 28);
+                background: rgba(2, 2, 2, 244);
+                border: 2px solid rgba(255, 255, 255, 58);
                 border-radius: 18px;
             }}
             QLabel {{
@@ -597,13 +612,13 @@ class OverlayWindow(QWidget):
                 font: 11pt "Segoe UI Semibold";
             }}
             QLabel#confirmMessage {{
-                color: rgba(244, 244, 244, 190);
+                color: rgba(244, 244, 244, 204);
                 font: 9pt "Segoe UI";
                 line-height: 130%;
             }}
             QPushButton {{
-                background: rgba(255, 255, 255, 20);
-                border: 1px solid rgba(255, 255, 255, 28);
+                background: rgba(255, 255, 255, 18);
+                border: 1px solid rgba(255, 255, 255, 42);
                 border-radius: 10px;
                 color: {self._overlay_text_color};
                 min-height: 34px;
@@ -611,14 +626,14 @@ class OverlayWindow(QWidget):
                 padding: 6px 12px;
             }}
             QPushButton#dangerButton {{
-                background: rgba(255, 92, 92, 58);
-                border: 1px solid rgba(255, 130, 130, 92);
+                background: rgba(255, 76, 76, 64);
+                border: 1px solid rgba(255, 130, 130, 112);
             }}
             QPushButton:hover {{
-                background: rgba(255, 255, 255, 32);
+                background: rgba(255, 255, 255, 34);
             }}
             QPushButton#dangerButton:hover {{
-                background: rgba(255, 92, 92, 78);
+                background: rgba(255, 76, 76, 86);
             }}
             """
         )
