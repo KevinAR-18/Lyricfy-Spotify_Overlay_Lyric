@@ -564,11 +564,20 @@ class OverlayWindow(QWidget):
                 dialog.move(event.globalPosition().toPoint() - drag_offset["value"])
                 event.accept()
 
-        dialog.mousePressEvent = start_drag
-        dialog.mouseMoveEvent = move_drag
+        def enable_drag(widget: QWidget) -> None:
+            widget.mousePressEvent = start_drag
+            widget.mouseMoveEvent = move_drag
 
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(18, 16, 18, 16)
+        outer_layout = QVBoxLayout(dialog)
+        outer_layout.setContentsMargins(12, 12, 12, 12)
+        outer_layout.setSpacing(0)
+
+        surface = QWidget()
+        surface.setObjectName("confirmSurface")
+        outer_layout.addWidget(surface)
+
+        layout = QVBoxLayout(surface)
+        layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(12)
 
         title = QLabel("Clear downloaded lyrics?")
@@ -597,11 +606,23 @@ class OverlayWindow(QWidget):
         layout.addWidget(message)
         layout.addLayout(actions)
 
+        for draggable_widget in (dialog, surface, title, message):
+            enable_drag(draggable_widget)
+
+        shadow = QGraphicsDropShadowEffect(dialog)
+        shadow.setBlurRadius(30)
+        shadow.setOffset(0, 10)
+        shadow.setColor(QColor(0, 0, 0, 180))
+        surface.setGraphicsEffect(shadow)
+
         dialog.setStyleSheet(
             f"""
             QDialog#confirmDialog {{
-                background: rgba(2, 2, 2, 244);
-                border: 2px solid rgba(255, 255, 255, 58);
+                background: transparent;
+            }}
+            QWidget#confirmSurface {{
+                background: rgba(3, 3, 4, 252);
+                border: 2px solid rgba(255, 255, 255, 92);
                 border-radius: 18px;
             }}
             QLabel {{
