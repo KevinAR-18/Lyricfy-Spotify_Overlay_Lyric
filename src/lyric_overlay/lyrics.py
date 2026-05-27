@@ -103,7 +103,6 @@ class LyricsRepository:
 
     def _load_lrclib(self, artist: str, title: str, duration_ms: int) -> LyricsData:
         duration_seconds = round(duration_ms / 1000)
-        network_failed = False
         try:
             response = self._session.get(
                 "https://lrclib.net/api/get",
@@ -115,30 +114,33 @@ class LyricsRepository:
                 timeout=LRCLIB_TIMEOUT_SECONDS,
             )
             if response.status_code != 200:
-                return LyricsData(source="lrclib", lines=[])
+                return self._search_lrclib(
+                    artist=artist,
+                    title=title,
+                    duration_seconds=duration_seconds,
+                )
 
             data = response.json()
             synced = data.get("syncedLyrics") or ""
             if not synced.strip():
-                return LyricsData(source="lrclib", lines=[])
+                return self._search_lrclib(
+                    artist=artist,
+                    title=title,
+                    duration_seconds=duration_seconds,
+                )
 
             lyrics = parse_lrc(synced, source="lrclib")
             if not lyrics.is_empty and self.auto_save_fetched_lrc:
                 self._save_fetched_lrc(artist=artist, title=title, text=synced)
             return lyrics
         except requests.RequestException:
-            network_failed = True
-
-        if network_failed:
-            return self._search_lrclib_on_network_failure(
+            return self._search_lrclib(
                 artist=artist,
                 title=title,
                 duration_seconds=duration_seconds,
             )
 
-        return LyricsData(source="lrclib", lines=[])
-
-    def _search_lrclib_on_network_failure(
+    def _search_lrclib(
         self,
         artist: str,
         title: str,
@@ -165,13 +167,15 @@ class LyricsRepository:
                 if not synced:
                     continue
 
-                item_artist = str(item.get("artistName") or "").casefold().strip()
-                item_title = str(item.get("trackName") or item.get("name") or "").casefold().strip()
-                if item_artist != artist.casefold().strip():
+                item_artist = str(item.get("artistName") or "")
+                item_title = str(item.get("trackName") or item.get("name") or "")
+                if not self._lrclib_result_matches(
+                    requested_artist=artist,
+                    requested_title=title,
+                    item_artist=item_artist,
+                    item_title=item_title,
+                ):
                     continue
-                if item_title != title.casefold().strip():
-                    continue
-
                 item_duration = item.get("duration")
                 try:
                     item_duration_seconds = int(round(float(item_duration)))
@@ -189,6 +193,34 @@ class LyricsRepository:
             return LyricsData(source="lrclib", lines=[])
 
         return LyricsData(source="lrclib", lines=[])
+
+    @staticmethod
+    def _lrclib_result_matches(
+        requested_artist: str,
+        requested_title: str,
+        item_artist: str,
+        item_title: str,
+    ) -> bool:
+        if normalize_match_text(item_title) != normalize_match_text(requested_title):
+            return False
+
+        normalized_requested_artist = normalize_match_text(requested_artist)
+        normalized_item_artist = normalize_match_text(item_artist)
+        if normalized_requested_artist == normalized_item_artist:
+            return True
+
+        requested_parts = artist_parts(requested_artist)
+        item_parts = artist_parts(item_artist)
+        if requested_parts and item_parts and requested_parts & item_parts:
+            return True
+
+        if normalized_requested_artist and normalized_item_artist:
+            return (
+                normalized_requested_artist in normalized_item_artist
+                or normalized_item_artist in normalized_requested_artist
+            )
+
+        return False
 
     def set_lrclib_enabled(self, enabled: bool) -> None:
         self.lrclib_enabled = enabled
