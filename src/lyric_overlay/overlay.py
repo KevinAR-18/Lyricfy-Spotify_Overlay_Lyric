@@ -43,13 +43,12 @@ def shortcuts_guide_text() -> str:
 class OverlayWindow(QWidget):
     save_requested = Signal(object)
     reconnect_requested = Signal()
-    lyric_color_toggle_requested = Signal(str)
+    lyric_color_toggle_requested = Signal(object)
     clear_lyrics_cache_requested = Signal()
     overlay_hidden = Signal()
     overlay_shown = Signal()
 
     _DEFAULT_LYRIC_COLOR = "#F4F4F4"
-    _DARK_LYRIC_COLOR = "#1A1A1A"
     _HEADER_VISIBLE_DURATION_SECONDS = 7.0
     _NO_LYRICS_NOTICE_SECONDS = 4.0
     _COMPACT_MIN_HEIGHT = 60
@@ -74,6 +73,8 @@ class OverlayWindow(QWidget):
         self._overlay_text_color = "#F4F4F4"
         self._lyric_text_color = "#F4F4F4"
         self._lyric_glow_color = "#66CCFFFF"
+        self._lyric_toggle_color = "#1A1A1A"
+        self._last_non_toggle_lyric_color = self._lyric_text_color
         self._lyric_font_family = "Segoe UI"
         self._lyric_font_size = 11
         self._text_alignment = "left"
@@ -168,6 +169,7 @@ class OverlayWindow(QWidget):
         self.text_color_input = self._create_input("Example: #F4F4F4")
         self.lyric_color_input = self._create_input("Example: #F4F4F4")
         self.glow_color_input = self._create_input("Example: #66CCFFFF")
+        self.toggle_color_input = self._create_input("Example: #1A1A1A")
         self.auto_save_lrc_checkbox = QCheckBox("Save fetched lyrics as local .lrc cache")
         self.shortcuts_label = QLabel(shortcuts_guide_text())
         self.shortcuts_label.setObjectName("shortcutsGuide")
@@ -186,7 +188,7 @@ class OverlayWindow(QWidget):
         self.clear_cache_button.clicked.connect(self.confirm_clear_downloaded_lyrics)
 
         self.reset_defaults_button = QPushButton("Reset Default")
-        self.reset_defaults_button.clicked.connect(self.reset_to_default_settings)
+        self.reset_defaults_button.clicked.connect(self.confirm_reset_default_settings)
 
         self.close_settings_button = QPushButton("Close Settings")
         self.close_settings_button.clicked.connect(self.close_settings_panel)
@@ -215,6 +217,7 @@ class OverlayWindow(QWidget):
         left_column.addWidget(self._create_field("Text Alignment", self.text_alignment_input))
         left_column.addWidget(self._create_field("Lyric Font", self.font_family_input))
         left_column.addWidget(self._create_field("Font Size", self.font_size_input))
+        left_column.addWidget(self.auto_save_lrc_checkbox)
         left_column.addStretch(1)
 
         right_column = QVBoxLayout()
@@ -225,7 +228,7 @@ class OverlayWindow(QWidget):
         right_column.addWidget(self._create_field("Text Color", self.text_color_input))
         right_column.addWidget(self._create_field("Lyric Color", self.lyric_color_input))
         right_column.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
-        right_column.addWidget(self.auto_save_lrc_checkbox)
+        right_column.addWidget(self._create_field("Toggle Lyric Color", self.toggle_color_input))
         right_column.addWidget(self._create_section_title("Shortcuts"))
         right_column.addWidget(self.shortcuts_label)
         right_column.addStretch(1)
@@ -444,6 +447,12 @@ class OverlayWindow(QWidget):
         self.text_color_input.setText(config.overlay_text_color)
         self.lyric_color_input.setText(config.lyric_text_color)
         self.glow_color_input.setText(config.lyric_glow_color)
+        self.toggle_color_input.setText(config.lyric_toggle_color)
+        self._lyric_toggle_color = config.lyric_toggle_color or "#1A1A1A"
+        if self._same_color(config.lyric_text_color, self._lyric_toggle_color):
+            self._last_non_toggle_lyric_color = self._DEFAULT_LYRIC_COLOR
+        else:
+            self._last_non_toggle_lyric_color = config.lyric_text_color or self._DEFAULT_LYRIC_COLOR
         self.auto_save_lrc_checkbox.setChecked(config.auto_save_fetched_lrc)
         self._show_settings_button = config.show_settings_button
         self._show_hide_button = config.show_hide_button
@@ -471,6 +480,7 @@ class OverlayWindow(QWidget):
             overlay_text_color=self.text_color_input.text().strip() or "#F4F4F4",
             lyric_text_color=self.lyric_color_input.text().strip() or "#F4F4F4",
             lyric_glow_color=self.glow_color_input.text().strip() or "#66CCFFFF",
+            lyric_toggle_color=self.toggle_color_input.text().strip() or "#1A1A1A",
             lyric_font_family=self.font_family_input.currentFont().family().strip() or "Segoe UI",
             lyric_font_size=self.font_size_input.value(),
             text_alignment=self.text_alignment_input.currentData(),
@@ -483,6 +493,7 @@ class OverlayWindow(QWidget):
         self._overlay_text_color = config.overlay_text_color or "#F4F4F4"
         self._lyric_text_color = config.lyric_text_color or "#F4F4F4"
         self._lyric_glow_color = config.lyric_glow_color or "#66CCFFFF"
+        self._lyric_toggle_color = config.lyric_toggle_color or "#1A1A1A"
         self._lyric_font_family = config.lyric_font_family or "Segoe UI"
         self._lyric_font_size = max(8, config.lyric_font_size or 11)
         self._text_alignment = config.text_alignment or "left"
@@ -543,9 +554,39 @@ class OverlayWindow(QWidget):
         defaults = default_config()
         self.load_config_values(defaults)
 
+    def confirm_reset_default_settings(self) -> None:
+        confirmed = self._confirm_action(
+            window_title="Reset Default",
+            title_text="Reset settings to default?",
+            message_text="This will replace the current form values with Lyricfy default settings. Save is still required to write them to .env.",
+            confirm_text="Reset",
+            danger=True,
+        )
+        if confirmed:
+            self.reset_to_default_settings()
+
     def confirm_clear_downloaded_lyrics(self) -> None:
+        confirmed = self._confirm_action(
+            window_title="Clear Downloaded Lyrics",
+            title_text="Clear downloaded lyrics?",
+            message_text="This will delete all saved .lrc cache files. Downloaded lyrics can be fetched again later.",
+            confirm_text="Delete",
+            danger=True,
+        )
+        if confirmed:
+            self.clear_lyrics_cache_requested.emit()
+
+    def _confirm_action(
+        self,
+        *,
+        window_title: str,
+        title_text: str,
+        message_text: str,
+        confirm_text: str,
+        danger: bool = False,
+    ) -> bool:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Clear Downloaded Lyrics")
+        dialog.setWindowTitle(window_title)
         dialog.setModal(True)
         dialog.setFixedWidth(360)
         dialog.setObjectName("confirmDialog")
@@ -580,10 +621,10 @@ class OverlayWindow(QWidget):
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(12)
 
-        title = QLabel("Clear downloaded lyrics?")
+        title = QLabel(title_text)
         title.setObjectName("confirmTitle")
 
-        message = QLabel("This will delete all saved .lrc cache files. Downloaded lyrics can be fetched again later.")
+        message = QLabel(message_text)
         message.setObjectName("confirmMessage")
         message.setWordWrap(True)
 
@@ -594,13 +635,14 @@ class OverlayWindow(QWidget):
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(dialog.reject)
 
-        delete_button = QPushButton("Delete")
-        delete_button.setObjectName("dangerButton")
-        delete_button.clicked.connect(dialog.accept)
+        confirm_button = QPushButton(confirm_text)
+        if danger:
+            confirm_button.setObjectName("dangerButton")
+        confirm_button.clicked.connect(dialog.accept)
 
         actions.addStretch(1)
         actions.addWidget(cancel_button)
-        actions.addWidget(delete_button)
+        actions.addWidget(confirm_button)
 
         layout.addWidget(title)
         layout.addWidget(message)
@@ -658,8 +700,7 @@ class OverlayWindow(QWidget):
             }}
             """
         )
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.clear_lyrics_cache_requested.emit()
+        return dialog.exec() == QDialog.DialogCode.Accepted
 
     def _emit_save(self) -> None:
         self.save_requested.emit(self.current_form_config())
@@ -670,15 +711,22 @@ class OverlayWindow(QWidget):
 
     def toggle_lyric_color_shortcut(self) -> None:
         current_color = (self.lyric_color_input.text().strip() or self._lyric_text_color).upper()
-        next_color = self._DARK_LYRIC_COLOR
-        if current_color == self._DARK_LYRIC_COLOR:
-            next_color = self._DEFAULT_LYRIC_COLOR
+        toggle_color = (self.toggle_color_input.text().strip() or self._lyric_toggle_color).upper()
+        if self._same_color(current_color, toggle_color):
+            next_color = self._last_non_toggle_lyric_color or self._DEFAULT_LYRIC_COLOR
+        else:
+            self._last_non_toggle_lyric_color = current_color
+            next_color = toggle_color
 
         self.lyric_color_input.setText(next_color)
         updated_config = self.current_form_config()
         self.apply_config_theme(updated_config)
         self.show_status(f"Lyric color: {next_color}")
-        self.lyric_color_toggle_requested.emit(next_color)
+        self.lyric_color_toggle_requested.emit(updated_config)
+
+    @staticmethod
+    def _same_color(left: str, right: str) -> bool:
+        return (left or "").strip().upper() == (right or "").strip().upper()
 
     def set_track(self, track: TrackInfo | None, lyrics_source: str = "") -> None:
         previous_compact_text = self.compact_label.text()

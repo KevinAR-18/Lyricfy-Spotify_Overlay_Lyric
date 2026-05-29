@@ -104,6 +104,7 @@ def main() -> int:
             overlay_text_color=updates.overlay_text_color or base_config.overlay_text_color,
             lyric_text_color=updates.lyric_text_color or base_config.lyric_text_color,
             lyric_glow_color=updates.lyric_glow_color or base_config.lyric_glow_color,
+            lyric_toggle_color=updates.lyric_toggle_color or base_config.lyric_toggle_color,
             lyric_font_family=updates.lyric_font_family or base_config.lyric_font_family,
             lyric_font_size=updates.lyric_font_size or base_config.lyric_font_size,
             text_alignment=updates.text_alignment or base_config.text_alignment,
@@ -156,7 +157,7 @@ def main() -> int:
         show_hide_button_action.setCheckable(True)
         overlay_buttons_menu.addAction(show_settings_button_action)
         overlay_buttons_menu.addAction(show_hide_button_action)
-        signature_action = QAction("Lyricfy v1.2.2", tray_menu)
+        signature_action = QAction("Lyricfy v1.3.0", tray_menu)
         signature_action.setEnabled(False)
         exit_action = QAction("Exit", tray_menu)
         tray_menu.addAction(show_action)
@@ -194,6 +195,7 @@ def main() -> int:
                 overlay_text_color=base_config.overlay_text_color,
                 lyric_text_color=base_config.lyric_text_color,
                 lyric_glow_color=base_config.lyric_glow_color,
+                lyric_toggle_color=base_config.lyric_toggle_color,
                 lyric_font_family=base_config.lyric_font_family,
                 lyric_font_size=base_config.lyric_font_size,
                 text_alignment=base_config.text_alignment,
@@ -231,6 +233,7 @@ def main() -> int:
                 overlay_text_color=base_config.overlay_text_color,
                 lyric_text_color=base_config.lyric_text_color,
                 lyric_glow_color=base_config.lyric_glow_color,
+                lyric_toggle_color=base_config.lyric_toggle_color,
                 lyric_font_family=base_config.lyric_font_family,
                 lyric_font_size=base_config.lyric_font_size,
                 text_alignment=base_config.text_alignment,
@@ -304,7 +307,7 @@ def main() -> int:
         sync_mode_actions(saved_config.playback_source)
         sync_overlay_button_actions(saved_config)
 
-    def toggle_lyric_color(lyric_color: str) -> None:
+    def toggle_lyric_color(updated_config: AppConfig) -> None:
         saved_config = AppConfig(
             playback_source=controller.config.playback_source,
             spotify_client_id=controller.config.spotify_client_id,
@@ -312,17 +315,18 @@ def main() -> int:
             spotify_redirect_uri=controller.config.spotify_redirect_uri,
             poll_interval_ms=controller.config.poll_interval_ms,
             lrclib_enabled=controller.config.lrclib_enabled,
-            auto_save_fetched_lrc=controller.config.auto_save_fetched_lrc,
-            lyric_offset_ms=controller.config.lyric_offset_ms,
-            overlay_bg_color=controller.config.overlay_bg_color,
-            overlay_text_color=controller.config.overlay_text_color,
-            lyric_text_color=lyric_color or controller.config.lyric_text_color,
-            lyric_glow_color=controller.config.lyric_glow_color,
-            lyric_font_family=controller.config.lyric_font_family,
-            lyric_font_size=controller.config.lyric_font_size,
-            text_alignment=controller.config.text_alignment,
-            show_settings_button=controller.config.show_settings_button,
-            show_hide_button=controller.config.show_hide_button,
+            auto_save_fetched_lrc=updated_config.auto_save_fetched_lrc,
+            lyric_offset_ms=updated_config.lyric_offset_ms,
+            overlay_bg_color=updated_config.overlay_bg_color,
+            overlay_text_color=updated_config.overlay_text_color,
+            lyric_text_color=updated_config.lyric_text_color or controller.config.lyric_text_color,
+            lyric_glow_color=updated_config.lyric_glow_color,
+            lyric_toggle_color=updated_config.lyric_toggle_color,
+            lyric_font_family=updated_config.lyric_font_family,
+            lyric_font_size=updated_config.lyric_font_size,
+            text_alignment=updated_config.text_alignment,
+            show_settings_button=updated_config.show_settings_button,
+            show_hide_button=updated_config.show_hide_button,
         )
         save_config(saved_config)
         controller.config = saved_config

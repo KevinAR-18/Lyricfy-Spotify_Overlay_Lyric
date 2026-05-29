@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set VERSION=v1.2.2
+set VERSION=v1.3.0
 
 echo ========================================
 echo Building Lyricfy %VERSION%...
@@ -32,12 +32,24 @@ echo.
   --hidden-import=PySide6.QtGui ^
   --hidden-import=PySide6.QtWidgets ^
   --hidden-import=spotipy ^
-  --hidden-import=winsdk ^
+  --hidden-import=spotipy.oauth2 ^
+  --hidden-import=winsdk.windows.media.control ^
   --hidden-import=requests ^
   --hidden-import=dotenv ^
-  --collect-all=spotipy ^
-  --collect-all=winsdk ^
-  --collect-all=PySide6 ^
+  --exclude-module=PyQt5 ^
+  --exclude-module=PyQt6 ^
+  --exclude-module=PySide2 ^
+  --exclude-module=redis ^
+  --exclude-module=winrt ^
+  --exclude-module=PySide6.QtMultimedia ^
+  --exclude-module=PySide6.QtDesigner ^
+  --exclude-module=PySide6.QtHelp ^
+  --exclude-module=PySide6.QtTest ^
+  --exclude-module=PySide6.QtQuick ^
+  --exclude-module=PySide6.QtQml ^
+  --exclude-module=PySide6.QtWebEngineCore ^
+  --exclude-module=PySide6.QtWebEngineQuick ^
+  --exclude-module=PySide6.QtWebEngineWidgets ^
   src\main.py
 
 if %ERRORLEVEL% NEQ 0 (

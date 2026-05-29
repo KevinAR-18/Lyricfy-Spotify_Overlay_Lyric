@@ -21,7 +21,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Automatic `.lrc` cache for lyrics fetched from LRCLIB
 - Faster first window open by connecting to Spotify after the overlay is shown
 - Displays `Fetching lyrics...` while lyric lookup is still in progress
-- `Shift+C` shortcut to toggle lyric color quickly
+- `Shift+C` shortcut to toggle between the lyric color and a custom toggle color quickly
 - `Shift+S` shortcut to open or close settings quickly
 - `Shift+F` shortcut to hide the overlay to tray quickly
 - `Ctrl+R` shortcut to reload Spotify connection quickly
@@ -127,6 +127,7 @@ OVERLAY_BG_COLOR=#0A0A0AEB
 OVERLAY_TEXT_COLOR=#F4F4F4
 LYRIC_TEXT_COLOR=#F4F4F4
 LYRIC_GLOW_COLOR=#66CCFFFF
+LYRIC_TOGGLE_COLOR=#1A1A1A
 LYRIC_FONT_FAMILY=Segoe UI
 LYRIC_FONT_SIZE=11
 TEXT_ALIGNMENT=left
@@ -187,7 +188,7 @@ You can also change the mode from the tray menu:
 - `Open Settings`
 - `Mode` -> `Non-API` or `API`
 - `Overlay Buttons` -> show or hide the `Settings` and `Hide` buttons on the overlay
-- `Lyricfy v1.2.2`
+- `Lyricfy v1.3.0`
 
 Recommended value:
 
@@ -272,7 +273,7 @@ The build script packages the app as a one-file windowed executable and includes
 
 ## Keyboard Shortcuts
 
-- `Shift+C` toggles the lyric color mode quickly
+- `Shift+C` toggles between the lyric color and the custom toggle lyric color
 - `Shift+S` opens or closes the settings panel
 - `Shift+F` hides the overlay to the system tray
 - `Ctrl+R` reloads the Spotify connection without opening settings

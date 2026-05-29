@@ -72,6 +72,7 @@ class AppConfig:
     overlay_text_color: str = "#F4F4F4"
     lyric_text_color: str = "#F4F4F4"
     lyric_glow_color: str = "#66CCFFFF"
+    lyric_toggle_color: str = "#1A1A1A"
     lyric_font_family: str = "Segoe UI"
     lyric_font_size: int = 11
     text_alignment: str = "left"
@@ -94,6 +95,7 @@ def default_config() -> AppConfig:
         overlay_text_color="#F4F4F4",
         lyric_text_color="#F4F4F4",
         lyric_glow_color="#66CCFFFF",
+        lyric_toggle_color="#1A1A1A",
         lyric_font_family="Segoe UI",
         lyric_font_size=11,
         text_alignment="left",
@@ -129,6 +131,7 @@ def load_config() -> AppConfig:
         overlay_text_color=os.getenv("OVERLAY_TEXT_COLOR", "#F4F4F4").strip() or "#F4F4F4",
         lyric_text_color=os.getenv("LYRIC_TEXT_COLOR", "#F4F4F4").strip() or "#F4F4F4",
         lyric_glow_color=os.getenv("LYRIC_GLOW_COLOR", "#66CCFFFF").strip() or "#66CCFFFF",
+        lyric_toggle_color=os.getenv("LYRIC_TOGGLE_COLOR", "#1A1A1A").strip() or "#1A1A1A",
         lyric_font_family=os.getenv("LYRIC_FONT_FAMILY", "Segoe UI").strip() or "Segoe UI",
         lyric_font_size=int(os.getenv("LYRIC_FONT_SIZE", "11")),
         text_alignment=_normalize_text_alignment(os.getenv("TEXT_ALIGNMENT", "left")),
@@ -188,6 +191,7 @@ def save_config(config: AppConfig) -> None:
         f"OVERLAY_TEXT_COLOR={config.overlay_text_color}",
         f"LYRIC_TEXT_COLOR={config.lyric_text_color}",
         f"LYRIC_GLOW_COLOR={config.lyric_glow_color}",
+        f"LYRIC_TOGGLE_COLOR={config.lyric_toggle_color}",
         f"LYRIC_FONT_FAMILY={config.lyric_font_family}",
         f"LYRIC_FONT_SIZE={config.lyric_font_size}",
         f"TEXT_ALIGNMENT={_normalize_text_alignment(config.text_alignment)}",
