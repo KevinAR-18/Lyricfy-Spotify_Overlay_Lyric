@@ -218,6 +218,8 @@ class OverlayWindow(QWidget):
         left_column.addWidget(self._create_field("Lyric Font", self.font_family_input))
         left_column.addWidget(self._create_field("Font Size", self.font_size_input))
         left_column.addWidget(self.auto_save_lrc_checkbox)
+        left_column.addWidget(self._create_section_title("Shortcuts"))
+        left_column.addWidget(self.shortcuts_label)
         left_column.addStretch(1)
 
         right_column = QVBoxLayout()
@@ -229,8 +231,6 @@ class OverlayWindow(QWidget):
         right_column.addWidget(self._create_field("Lyric Color", self.lyric_color_input))
         right_column.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
         right_column.addWidget(self._create_field("Toggle Lyric Color", self.toggle_color_input))
-        right_column.addWidget(self._create_section_title("Shortcuts"))
-        right_column.addWidget(self.shortcuts_label)
         right_column.addStretch(1)
 
         credentials_layout = QVBoxLayout()
