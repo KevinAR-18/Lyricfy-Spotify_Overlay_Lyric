@@ -9,6 +9,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Checks local `.lrc` files first, then falls back to LRCLIB
 - Caches fetched LRCLIB lyrics as local `.lrc` files for future playback
 - Reuses downloaded lyric cache across app restarts
+- Batch-downloads `.lrc` files for Spotify liked songs and playlists with read-only API access
 - Retries lyric lookup automatically when a new track does not resolve on the first attempt
 - Compact frameless overlay that stays on top
 - Draggable overlay with snap-back behavior near the last saved position
@@ -54,6 +55,7 @@ python src\main.py
 |-- assets/
 |   `-- lrc/
 |-- src/
+|   |-- download_spotify_lrc.py
 |   |-- main.py
 |   `-- lyric_overlay/
 |       |-- app_controller.py
@@ -83,6 +85,14 @@ http://127.0.0.1:8888/callback
 ```
 
 4. Copy the `Client ID` and `Client Secret`.
+
+The batch `.lrc` downloader uses these Spotify read-only scopes:
+
+```text
+user-library-read playlist-read-private playlist-read-collaborative
+```
+
+These scopes allow Lyricfy to read liked songs and playlists. They do not allow creating, editing, deleting, or adding tracks to playlists.
 
 ## Installation
 
@@ -151,6 +161,41 @@ python src\main.py
 ```
 
 Do not run internal module files directly.
+
+## Spotify Library LRC Downloader
+
+Lyricfy includes a separate CLI tool for downloading synced `.lrc` files from LRCLIB based on your Spotify liked songs and playlists.
+
+Run a small test first:
+
+```powershell
+python src\download_spotify_lrc.py --limit 5
+```
+
+Download for all readable liked songs and playlists:
+
+```powershell
+python src\download_spotify_lrc.py
+```
+
+Useful options:
+
+```powershell
+python src\download_spotify_lrc.py --source liked
+python src\download_spotify_lrc.py --source playlists
+python src\download_spotify_lrc.py --limit 50
+python src\download_spotify_lrc.py --no-report
+```
+
+The downloader:
+
+- Reads Spotify data only; it does not modify your account or playlists
+- Deduplicates songs by Spotify track ID
+- Skips `.lrc` files that already exist
+- Saves downloaded files to `assets\lrc\downloaded\`
+- Writes a JSON report to `assets\lrc\downloaded\lrc_download_report.json` by default
+
+If Spotify login was already cached before these read-only scopes were added, delete `.spotify_cache` and run the downloader again to authorize the updated scopes.
 
 ## Settings Panel
 
