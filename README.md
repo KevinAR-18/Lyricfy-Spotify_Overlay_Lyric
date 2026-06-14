@@ -143,6 +143,9 @@ LYRIC_FONT_SIZE=11
 TEXT_ALIGNMENT=left
 SHOW_SETTINGS_BUTTON=true
 SHOW_HIDE_BUTTON=true
+HOVER_BUTTONS_ENABLED=false
+AUTOSTART_ENABLED=false
+AUTOSTART_START_HIDDEN=false
 ```
 
 Important runtime files:
@@ -232,7 +235,8 @@ You can also change the mode from the tray menu:
 - `Hide Overlay`
 - `Open Settings`
 - `Mode` -> `Non-API` or `API`
-- `Overlay Buttons` -> show or hide the `Settings` and `Hide` buttons on the overlay
+- `Overlay Buttons` -> show, hide, or enable hover-only mode for the overlay `Settings` and `Hide` buttons
+- `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
 - `Lyricfy v1.3.1`
 
 Recommended value:

@@ -7,6 +7,10 @@ from PySide6.QtCore import QTimer, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QAction, QActionGroup, QIcon
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
+
+APP_NAME = "Lyricfy"
+START_HIDDEN_ARG = "--start-hidden"
+
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from lyric_overlay.app_controller import AppController
@@ -74,14 +78,42 @@ def playback_startup_lines(playback_source: str, error_message: str | None = Non
     )
 
 
+def set_windows_autostart(enabled: bool, start_hidden: bool) -> None:
+    try:
+        import winreg
+    except ImportError:
+        return
+
+    if getattr(sys, "frozen", False):
+        command = f'"{sys.executable}"'
+    else:
+        command = f'"{sys.executable}" "{Path(sys.argv[0]).resolve()}"'
+    if start_hidden:
+        command = f"{command} {START_HIDDEN_ARG}"
+
+    run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_SET_VALUE) as key:
+            if enabled:
+                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, command)
+            else:
+                try:
+                    winreg.DeleteValue(key, APP_NAME)
+                except FileNotFoundError:
+                    pass
+    except OSError:
+        pass
+
+
 def main() -> int:
     qInstallMessageHandler(qt_message_handler)
     ensure_directories()
     ensure_env_file()
     config = load_config()
+    set_windows_autostart(config.autostart_enabled, config.autostart_start_hidden)
 
     app = create_application()
-    app.setApplicationName("Lyricfy")
+    app.setApplicationName(APP_NAME)
     icon_path = ICON_FILE
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
@@ -110,12 +142,19 @@ def main() -> int:
             text_alignment=updates.text_alignment or base_config.text_alignment,
             show_settings_button=updates.show_settings_button,
             show_hide_button=updates.show_hide_button,
+            hover_buttons_enabled=updates.hover_buttons_enabled,
+            autostart_enabled=updates.autostart_enabled,
+            autostart_start_hidden=updates.autostart_start_hidden,
         )
 
     mode_windows_action = None
     mode_api_action = None
     show_settings_button_action = None
     show_hide_button_action = None
+    hover_buttons_action = None
+    autostart_action = None
+    autostart_show_action = None
+    autostart_hidden_action = None
 
     def sync_mode_actions(playback_source: str) -> None:
         normalized = playback_source or WINDOWS_PLAYBACK_SOURCE
@@ -129,6 +168,16 @@ def main() -> int:
             show_settings_button_action.setChecked(config.show_settings_button)
         if show_hide_button_action is not None:
             show_hide_button_action.setChecked(config.show_hide_button)
+        if hover_buttons_action is not None:
+            hover_buttons_action.setChecked(config.hover_buttons_enabled)
+
+    def sync_startup_actions(config: AppConfig) -> None:
+        if autostart_action is not None:
+            autostart_action.setChecked(config.autostart_enabled)
+        if autostart_show_action is not None:
+            autostart_show_action.setChecked(not config.autostart_start_hidden)
+        if autostart_hidden_action is not None:
+            autostart_hidden_action.setChecked(config.autostart_start_hidden)
 
     tray_icon = None
     if QSystemTrayIcon.isSystemTrayAvailable():
@@ -143,8 +192,11 @@ def main() -> int:
         settings_action = QAction("Open Settings", tray_menu)
         mode_menu = QMenu("Mode", tray_menu)
         overlay_buttons_menu = QMenu("Overlay Buttons", tray_menu)
+        startup_menu = QMenu("Startup", tray_menu)
         mode_group = QActionGroup(mode_menu)
         mode_group.setExclusive(True)
+        startup_group = QActionGroup(startup_menu)
+        startup_group.setExclusive(True)
         mode_windows_action = QAction("Non-API", mode_group)
         mode_windows_action.setCheckable(True)
         mode_api_action = QAction("API", mode_group)
@@ -155,8 +207,22 @@ def main() -> int:
         show_settings_button_action.setCheckable(True)
         show_hide_button_action = QAction("Show Hide Button", overlay_buttons_menu)
         show_hide_button_action.setCheckable(True)
+        hover_buttons_action = QAction("Hover On", overlay_buttons_menu)
+        hover_buttons_action.setCheckable(True)
         overlay_buttons_menu.addAction(show_settings_button_action)
         overlay_buttons_menu.addAction(show_hide_button_action)
+        overlay_buttons_menu.addSeparator()
+        overlay_buttons_menu.addAction(hover_buttons_action)
+        autostart_action = QAction("Auto Start", startup_menu)
+        autostart_action.setCheckable(True)
+        autostart_show_action = QAction("Show Overlay", startup_group)
+        autostart_show_action.setCheckable(True)
+        autostart_hidden_action = QAction("Start Hidden", startup_group)
+        autostart_hidden_action.setCheckable(True)
+        startup_menu.addAction(autostart_action)
+        startup_menu.addSeparator()
+        startup_menu.addAction(autostart_show_action)
+        startup_menu.addAction(autostart_hidden_action)
         signature_action = QAction("Lyricfy v1.3.1", tray_menu)
         signature_action.setEnabled(False)
         exit_action = QAction("Exit", tray_menu)
@@ -165,6 +231,7 @@ def main() -> int:
         tray_menu.addAction(settings_action)
         tray_menu.addMenu(mode_menu)
         tray_menu.addMenu(overlay_buttons_menu)
+        tray_menu.addMenu(startup_menu)
         tray_menu.addSeparator()
         tray_menu.addAction(signature_action)
         tray_menu.addSeparator()
@@ -201,6 +268,9 @@ def main() -> int:
                 text_alignment=base_config.text_alignment,
                 show_settings_button=base_config.show_settings_button,
                 show_hide_button=base_config.show_hide_button,
+                hover_buttons_enabled=base_config.hover_buttons_enabled,
+                autostart_enabled=base_config.autostart_enabled,
+                autostart_start_hidden=base_config.autostart_start_hidden,
             )
             save_config(updated_config)
             overlay.load_config_values(updated_config)
@@ -218,6 +288,7 @@ def main() -> int:
             *,
             show_settings_button: bool | None = None,
             show_hide_button: bool | None = None,
+            hover_buttons_enabled: bool | None = None,
         ) -> None:
             base_config = load_config()
             updated_config = AppConfig(
@@ -247,11 +318,64 @@ def main() -> int:
                     if show_hide_button is None
                     else show_hide_button
                 ),
+                hover_buttons_enabled=(
+                    base_config.hover_buttons_enabled
+                    if hover_buttons_enabled is None
+                    else hover_buttons_enabled
+                ),
+                autostart_enabled=base_config.autostart_enabled,
+                autostart_start_hidden=base_config.autostart_start_hidden,
             )
             save_config(updated_config)
             overlay.load_config_values(updated_config)
             controller.config = updated_config
             sync_overlay_button_actions(updated_config)
+
+        def apply_startup_settings(
+            *,
+            autostart_enabled: bool | None = None,
+            autostart_start_hidden: bool | None = None,
+        ) -> None:
+            base_config = load_config()
+            updated_config = AppConfig(
+                playback_source=base_config.playback_source,
+                spotify_client_id=base_config.spotify_client_id,
+                spotify_client_secret=base_config.spotify_client_secret,
+                spotify_redirect_uri=base_config.spotify_redirect_uri,
+                poll_interval_ms=base_config.poll_interval_ms,
+                lrclib_enabled=base_config.lrclib_enabled,
+                auto_save_fetched_lrc=base_config.auto_save_fetched_lrc,
+                lyric_offset_ms=base_config.lyric_offset_ms,
+                overlay_bg_color=base_config.overlay_bg_color,
+                overlay_text_color=base_config.overlay_text_color,
+                lyric_text_color=base_config.lyric_text_color,
+                lyric_glow_color=base_config.lyric_glow_color,
+                lyric_toggle_color=base_config.lyric_toggle_color,
+                lyric_font_family=base_config.lyric_font_family,
+                lyric_font_size=base_config.lyric_font_size,
+                text_alignment=base_config.text_alignment,
+                show_settings_button=base_config.show_settings_button,
+                show_hide_button=base_config.show_hide_button,
+                hover_buttons_enabled=base_config.hover_buttons_enabled,
+                autostart_enabled=(
+                    base_config.autostart_enabled
+                    if autostart_enabled is None
+                    else autostart_enabled
+                ),
+                autostart_start_hidden=(
+                    base_config.autostart_start_hidden
+                    if autostart_start_hidden is None
+                    else autostart_start_hidden
+                ),
+            )
+            save_config(updated_config)
+            set_windows_autostart(
+                updated_config.autostart_enabled,
+                updated_config.autostart_start_hidden,
+            )
+            overlay.load_config_values(updated_config)
+            controller.config = updated_config
+            sync_startup_actions(updated_config)
 
         def exit_app() -> None:
             overlay.allow_exit()
@@ -275,6 +399,18 @@ def main() -> int:
         show_hide_button_action.triggered.connect(
             lambda checked: apply_overlay_button_visibility(show_hide_button=checked)
         )
+        hover_buttons_action.triggered.connect(
+            lambda checked: apply_overlay_button_visibility(hover_buttons_enabled=checked)
+        )
+        autostart_action.triggered.connect(
+            lambda checked: apply_startup_settings(autostart_enabled=checked)
+        )
+        autostart_show_action.triggered.connect(
+            lambda checked: apply_startup_settings(autostart_start_hidden=False) if checked else None
+        )
+        autostart_hidden_action.triggered.connect(
+            lambda checked: apply_startup_settings(autostart_start_hidden=True) if checked else None
+        )
         exit_action.triggered.connect(exit_app)
         tray_icon.activated.connect(
             lambda reason: show_overlay()
@@ -283,6 +419,7 @@ def main() -> int:
         )
         sync_mode_actions(config.playback_source)
         sync_overlay_button_actions(config)
+        sync_startup_actions(config)
         tray_icon.show()
 
     controller = AppController(
@@ -299,6 +436,7 @@ def main() -> int:
         current_config = controller.config
         saved_config = merge_config(current_config, new_config)
         save_config(saved_config)
+        set_windows_autostart(saved_config.autostart_enabled, saved_config.autostart_start_hidden)
         overlay.load_config_values(saved_config)
         overlay.apply_config_theme(saved_config)
         overlay.show_status("Settings saved to .env")
@@ -306,6 +444,7 @@ def main() -> int:
         controller.lyrics_repository.set_auto_save_fetched_lrc(saved_config.auto_save_fetched_lrc)
         sync_mode_actions(saved_config.playback_source)
         sync_overlay_button_actions(saved_config)
+        sync_startup_actions(saved_config)
 
     def toggle_lyric_color(updated_config: AppConfig) -> None:
         saved_config = AppConfig(
@@ -327,6 +466,9 @@ def main() -> int:
             text_alignment=updated_config.text_alignment,
             show_settings_button=updated_config.show_settings_button,
             show_hide_button=updated_config.show_hide_button,
+            hover_buttons_enabled=updated_config.hover_buttons_enabled,
+            autostart_enabled=updated_config.autostart_enabled,
+            autostart_start_hidden=updated_config.autostart_start_hidden,
         )
         save_config(saved_config)
         controller.config = saved_config
@@ -344,6 +486,7 @@ def main() -> int:
         overlay.load_config_values(latest)
         sync_mode_actions(latest.playback_source)
         sync_overlay_button_actions(latest)
+        sync_startup_actions(latest)
         controller.lyrics_repository.set_lrclib_enabled(latest.lrclib_enabled)
         controller.lyrics_repository.set_auto_save_fetched_lrc(latest.auto_save_fetched_lrc)
         new_client, error_message = build_playback_client(latest)
@@ -374,7 +517,11 @@ def main() -> int:
     overlay.set_track(None)
     overlay.set_lines("Starting Lyricfy...", "Connecting to Spotify playback")
     overlay.show_status("Connecting to Spotify playback...")
-    overlay.show()
+    start_hidden = START_HIDDEN_ARG in sys.argv
+    if start_hidden and tray_icon is not None:
+        overlay.hide_to_tray()
+    else:
+        overlay.show()
     QTimer.singleShot(0, initialize_spotify)
     return app.exec()
 

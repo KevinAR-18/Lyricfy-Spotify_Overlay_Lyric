@@ -78,6 +78,9 @@ class AppConfig:
     text_alignment: str = "left"
     show_settings_button: bool = True
     show_hide_button: bool = True
+    hover_buttons_enabled: bool = False
+    autostart_enabled: bool = False
+    autostart_start_hidden: bool = False
 
 
 def default_config() -> AppConfig:
@@ -101,6 +104,9 @@ def default_config() -> AppConfig:
         text_alignment="left",
         show_settings_button=True,
         show_hide_button=True,
+        hover_buttons_enabled=False,
+        autostart_enabled=False,
+        autostart_start_hidden=False,
     )
 
 
@@ -137,6 +143,9 @@ def load_config() -> AppConfig:
         text_alignment=_normalize_text_alignment(os.getenv("TEXT_ALIGNMENT", "left")),
         show_settings_button=os.getenv("SHOW_SETTINGS_BUTTON", "true").lower() == "true",
         show_hide_button=os.getenv("SHOW_HIDE_BUTTON", "true").lower() == "true",
+        hover_buttons_enabled=os.getenv("HOVER_BUTTONS_ENABLED", "false").lower() == "true",
+        autostart_enabled=os.getenv("AUTOSTART_ENABLED", "false").lower() == "true",
+        autostart_start_hidden=os.getenv("AUTOSTART_START_HIDDEN", "false").lower() == "true",
     )
 
 
@@ -197,5 +206,8 @@ def save_config(config: AppConfig) -> None:
         f"TEXT_ALIGNMENT={_normalize_text_alignment(config.text_alignment)}",
         f"SHOW_SETTINGS_BUTTON={'true' if config.show_settings_button else 'false'}",
         f"SHOW_HIDE_BUTTON={'true' if config.show_hide_button else 'false'}",
+        f"HOVER_BUTTONS_ENABLED={'true' if config.hover_buttons_enabled else 'false'}",
+        f"AUTOSTART_ENABLED={'true' if config.autostart_enabled else 'false'}",
+        f"AUTOSTART_START_HIDDEN={'true' if config.autostart_start_hidden else 'false'}",
     ]
     ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")

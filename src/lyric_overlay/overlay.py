@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QEasingCurve, QPoint, QRect, QPropertyAnimation, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics
+from PySide6.QtCore import QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -52,6 +52,7 @@ class OverlayWindow(QWidget):
     _HEADER_VISIBLE_DURATION_SECONDS = 7.0
     _NO_LYRICS_NOTICE_SECONDS = 4.0
     _COMPACT_MIN_HEIGHT = 60
+    _OVERLAY_CORNER_RADIUS = 30
 
     def __init__(self) -> None:
         super().__init__()
@@ -81,6 +82,8 @@ class OverlayWindow(QWidget):
         self._playback_source = WINDOWS_PLAYBACK_SOURCE
         self._show_settings_button = True
         self._show_hide_button = True
+        self._hover_buttons_enabled = False
+        self._mouse_over_overlay = False
         self._last_window_size: tuple[int, int] | None = None
         self._resize_animation = QPropertyAnimation(self, b"geometry", self)
         self._resize_animation.setDuration(180)
@@ -106,7 +109,6 @@ class OverlayWindow(QWidget):
 
         root = QWidget(self)
         root.setObjectName("card")
-        root.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -164,6 +166,9 @@ class OverlayWindow(QWidget):
         self.text_alignment_input.addItem("Left", "left")
         self.text_alignment_input.addItem("Center", "center")
         self.text_alignment_input.addItem("Right", "right")
+        self.startup_visibility_input = QComboBox()
+        self.startup_visibility_input.addItem("Show Overlay", False)
+        self.startup_visibility_input.addItem("Start Hidden", True)
         self.font_family_input = QFontComboBox()
         self.font_size_input = QSpinBox()
         self.font_size_input.setRange(8, 48)
@@ -174,6 +179,8 @@ class OverlayWindow(QWidget):
         self.glow_color_input = self._create_input("Example: #66CCFFFF")
         self.toggle_color_input = self._create_input("Example: #1A1A1A")
         self.auto_save_lrc_checkbox = QCheckBox("Save fetched lyrics as local .lrc cache")
+        self.hover_buttons_checkbox = QCheckBox("Hover On: show Settings and Hide buttons on mouse hover")
+        self.autostart_checkbox = QCheckBox("Auto start when Windows starts")
         self.shortcuts_label = QLabel(shortcuts_guide_text())
         self.shortcuts_label.setObjectName("shortcutsGuide")
         self.shortcuts_label.setWordWrap(True)
@@ -221,6 +228,9 @@ class OverlayWindow(QWidget):
         left_column.addWidget(self._create_field("Lyric Font", self.font_family_input))
         left_column.addWidget(self._create_field("Font Size", self.font_size_input))
         left_column.addWidget(self.auto_save_lrc_checkbox)
+        left_column.addWidget(self.hover_buttons_checkbox)
+        left_column.addWidget(self.autostart_checkbox)
+        left_column.addWidget(self._create_field("Auto Start Mode", self.startup_visibility_input))
         left_column.addWidget(self._create_section_title("Shortcuts"))
         left_column.addWidget(self.shortcuts_label)
         left_column.addStretch(1)
@@ -279,9 +289,8 @@ class OverlayWindow(QWidget):
         self.setStyleSheet(
             f"""
             QWidget#card {{
-                background: {self._overlay_bg_color};
-                border: 1px solid rgba(255, 255, 255, 18);
-                border-radius: 26px;
+                background: transparent;
+                border: none;
             }}
             QLabel {{
                 color: {self._overlay_text_color};
@@ -373,6 +382,7 @@ class OverlayWindow(QWidget):
         self.track_title_label.style().polish(self.track_title_label)
         self._lyric_glow.setColor(QColor(self._lyric_glow_color))
         self._apply_text_preferences()
+        self.update()
 
     def _create_input(self, placeholder: str) -> QLineEdit:
         widget = QLineEdit()
@@ -459,6 +469,10 @@ class OverlayWindow(QWidget):
         self.auto_save_lrc_checkbox.setChecked(config.auto_save_fetched_lrc)
         self._show_settings_button = config.show_settings_button
         self._show_hide_button = config.show_hide_button
+        self._hover_buttons_enabled = config.hover_buttons_enabled
+        self.hover_buttons_checkbox.setChecked(config.hover_buttons_enabled)
+        self.autostart_checkbox.setChecked(config.autostart_enabled)
+        self._set_startup_visibility_selection(config.autostart_start_hidden)
         self._sync_playback_source_ui()
         self._sync_overlay_buttons_ui()
         self.apply_config_theme(config)
@@ -489,6 +503,9 @@ class OverlayWindow(QWidget):
             text_alignment=self.text_alignment_input.currentData(),
             show_settings_button=self._show_settings_button,
             show_hide_button=self._show_hide_button,
+            hover_buttons_enabled=self.hover_buttons_checkbox.isChecked(),
+            autostart_enabled=self.autostart_checkbox.isChecked(),
+            autostart_start_hidden=bool(self.startup_visibility_input.currentData()),
         )
 
     def apply_config_theme(self, config: AppConfig) -> None:
@@ -510,9 +527,17 @@ class OverlayWindow(QWidget):
     def playback_source(self) -> str:
         return self._playback_source
 
-    def set_overlay_buttons_visibility(self, show_settings_button: bool, show_hide_button: bool) -> None:
+    def set_overlay_buttons_visibility(
+        self,
+        show_settings_button: bool,
+        show_hide_button: bool,
+        hover_buttons_enabled: bool | None = None,
+    ) -> None:
         self._show_settings_button = show_settings_button
         self._show_hide_button = show_hide_button
+        if hover_buttons_enabled is not None:
+            self._hover_buttons_enabled = hover_buttons_enabled
+            self.hover_buttons_checkbox.setChecked(hover_buttons_enabled)
         self._sync_overlay_buttons_ui()
         self._refresh_layout_after_settings_change()
 
@@ -903,6 +928,13 @@ class OverlayWindow(QWidget):
                 return
         self.text_alignment_input.setCurrentIndex(0)
 
+    def _set_startup_visibility_selection(self, start_hidden: bool) -> None:
+        for index in range(self.startup_visibility_input.count()):
+            if bool(self.startup_visibility_input.itemData(index)) == start_hidden:
+                self.startup_visibility_input.setCurrentIndex(index)
+                return
+        self.startup_visibility_input.setCurrentIndex(0)
+
     def _qt_alignment(self, alignment: str) -> Qt.AlignmentFlag:
         normalized = (alignment or "").strip().lower()
         if normalized == "center":
@@ -918,6 +950,12 @@ class OverlayWindow(QWidget):
             field.setVisible(show_oauth_fields)
 
     def _sync_overlay_buttons_ui(self) -> None:
+        if self._hover_buttons_enabled:
+            visible_on_hover = self._mouse_over_overlay or self._expanded
+            self.settings_button.setVisible(visible_on_hover)
+            self.close_button.setVisible(visible_on_hover)
+            return
+
         self.settings_button.setVisible(self._show_settings_button or self._expanded)
         self.close_button.setVisible(self._show_hide_button)
 
@@ -1109,6 +1147,36 @@ class OverlayWindow(QWidget):
         super().resizeEvent(event)
         self._refresh_compact_text()
 
+    def enterEvent(self, event) -> None:  # noqa: N802
+        super().enterEvent(event)
+        self._mouse_over_overlay = True
+        if self._hover_buttons_enabled:
+            self._sync_overlay_buttons_ui()
+            self._apply_window_mode_if_needed()
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        super().leaveEvent(event)
+        self._mouse_over_overlay = False
+        if self._hover_buttons_enabled:
+            self._sync_overlay_buttons_ui()
+            self._apply_window_mode_if_needed()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(QColor(255, 255, 255, 18), 1))
+        painter.setBrush(self._overlay_background_qcolor())
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        radius = min(self._OVERLAY_CORNER_RADIUS, max(1.0, rect.height() / 2))
+        painter.drawRoundedRect(rect, radius, radius)
+
+    def _overlay_background_qcolor(self) -> QColor:
+        color = QColor(self._overlay_bg_color)
+        if color.isValid():
+            return color
+        return QColor(10, 10, 10, 235)
+
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self.setFocus(Qt.FocusReason.MouseFocusReason)
@@ -1193,5 +1261,5 @@ class OverlayWindow(QWidget):
 
 def create_application() -> QApplication:
     app = QApplication.instance() or QApplication([])
-    app.setQuitOnLastWindowClosed(True)
+    app.setQuitOnLastWindowClosed(False)
     return app
