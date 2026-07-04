@@ -1,4 +1,5 @@
 .env
+.venv
 .spotify_cache
 examplebuildbat.bat
 src/lyric_overlay/__pycache__/
