@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 
 from PySide6.QtCore import QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
@@ -38,6 +39,85 @@ def shortcuts_guide_lines() -> list[tuple[str, str]]:
 
 def shortcuts_guide_text() -> str:
     return "\n".join(f"{shortcut}  {description}" for shortcut, description in shortcuts_guide_lines())
+
+
+def suppress_windows_native_frame(widget: QWidget) -> None:
+    if not sys.platform.startswith("win"):
+        return
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return
+
+    try:
+        hwnd = wintypes.HWND(int(widget.winId()))
+        user32 = ctypes.windll.user32
+        dwmapi = ctypes.windll.dwmapi
+
+        ggw_style = -16
+        ggw_exstyle = -20
+        ws_caption = 0x00C00000
+        ws_thickframe = 0x00040000
+        ws_border = 0x00800000
+        ws_dlgframe = 0x00400000
+        ws_ex_dlgmodalframe = 0x00000001
+        ws_ex_clientedge = 0x00000200
+        ws_ex_staticedge = 0x00020000
+        ws_ex_windowedge = 0x00000100
+        swp_nosize = 0x0001
+        swp_nomove = 0x0002
+        swp_nozorder = 0x0004
+        swp_noactivate = 0x0010
+        swp_framechanged = 0x0020
+
+        get_window_long = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+        set_window_long = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+        get_window_long.restype = ctypes.c_ssize_t
+        set_window_long.restype = ctypes.c_ssize_t
+
+        style = get_window_long(hwnd, ggw_style)
+        style &= ~(ws_caption | ws_thickframe | ws_border | ws_dlgframe)
+        set_window_long(hwnd, ggw_style, style)
+
+        exstyle = get_window_long(hwnd, ggw_exstyle)
+        exstyle &= ~(ws_ex_dlgmodalframe | ws_ex_clientedge | ws_ex_staticedge | ws_ex_windowedge)
+        set_window_long(hwnd, ggw_exstyle, exstyle)
+
+        user32.SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            0,
+            0,
+            swp_nomove | swp_nosize | swp_nozorder | swp_noactivate | swp_framechanged,
+        )
+
+        ncrendering_disabled = ctypes.c_int(1)
+        dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            2,  # DWMWA_NCRENDERING_POLICY
+            ctypes.byref(ncrendering_disabled),
+            ctypes.sizeof(ncrendering_disabled),
+        )
+        color_none = ctypes.c_uint(0xFFFFFFFE)
+        dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            34,  # DWMWA_BORDER_COLOR
+            ctypes.byref(color_none),
+            ctypes.sizeof(color_none),
+        )
+        corner_preference_do_not_round = ctypes.c_int(1)
+        dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            33,  # DWMWA_WINDOW_CORNER_PREFERENCE
+            ctypes.byref(corner_preference_do_not_round),
+            ctypes.sizeof(corner_preference_do_not_round),
+        )
+    except (AttributeError, OSError, ValueError):
+        return
 
 
 class OverlayWindow(QWidget):
@@ -1139,6 +1219,8 @@ class OverlayWindow(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        suppress_windows_native_frame(self)
+        QTimer.singleShot(0, lambda: suppress_windows_native_frame(self))
         if not self._initial_positioned:
             self._apply_window_mode()
             self._initial_positioned = True

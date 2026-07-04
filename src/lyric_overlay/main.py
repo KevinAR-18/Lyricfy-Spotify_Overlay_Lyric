@@ -223,7 +223,7 @@ def main() -> int:
         startup_menu.addSeparator()
         startup_menu.addAction(autostart_show_action)
         startup_menu.addAction(autostart_hidden_action)
-        signature_action = QAction("Lyricfy v1.3.1", tray_menu)
+        signature_action = QAction("Lyricfy v1.3.2", tray_menu)
         signature_action.setEnabled(False)
         exit_action = QAction("Exit", tray_menu)
         tray_menu.addAction(show_action)
