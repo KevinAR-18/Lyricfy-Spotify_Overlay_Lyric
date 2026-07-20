@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import time
 
-from PySide6.QtCore import QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -66,6 +66,8 @@ def suppress_windows_native_frame(widget: QWidget) -> None:
         ws_ex_clientedge = 0x00000200
         ws_ex_staticedge = 0x00020000
         ws_ex_windowedge = 0x00000100
+        ws_ex_appwindow = 0x00040000
+        ws_ex_toolwindow = 0x00000080
         swp_nosize = 0x0001
         swp_nomove = 0x0002
         swp_nozorder = 0x0004
@@ -83,6 +85,8 @@ def suppress_windows_native_frame(widget: QWidget) -> None:
 
         exstyle = get_window_long(hwnd, ggw_exstyle)
         exstyle &= ~(ws_ex_dlgmodalframe | ws_ex_clientedge | ws_ex_staticedge | ws_ex_windowedge)
+        exstyle &= ~ws_ex_appwindow
+        exstyle |= ws_ex_toolwindow
         set_window_long(hwnd, ggw_exstyle, exstyle)
 
         user32.SetWindowPos(
@@ -120,6 +124,36 @@ def suppress_windows_native_frame(widget: QWidget) -> None:
         return
 
 
+def force_windows_topmost(widget: QWidget) -> None:
+    if not sys.platform.startswith("win"):
+        return
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return
+
+    try:
+        hwnd = wintypes.HWND(int(widget.winId()))
+        hwnd_topmost = wintypes.HWND(-1)
+        swp_nosize = 0x0001
+        swp_nomove = 0x0002
+        swp_noactivate = 0x0010
+        swp_showwindow = 0x0040
+        ctypes.windll.user32.SetWindowPos(
+            hwnd,
+            hwnd_topmost,
+            0,
+            0,
+            0,
+            0,
+            swp_nomove | swp_nosize | swp_noactivate | swp_showwindow,
+        )
+    except (AttributeError, OSError, ValueError):
+        return
+
+
 class OverlayWindow(QWidget):
     save_requested = Signal(object)
     reconnect_requested = Signal()
@@ -143,6 +177,7 @@ class OverlayWindow(QWidget):
         self._snap_threshold = 28
         self._user_positioned = False
         self._allow_exit = False
+        self._hide_requested = False
         self._track_text = "Spotify is not playing"
         self._artist_text = ""
         self._current_line_text = ""
@@ -168,6 +203,9 @@ class OverlayWindow(QWidget):
         self._resize_animation = QPropertyAnimation(self, b"geometry", self)
         self._resize_animation.setDuration(180)
         self._resize_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._topmost_timer = QTimer(self)
+        self._topmost_timer.setInterval(100)
+        self._topmost_timer.timeout.connect(self._keep_topmost_above_shell)
         self._transient_refresh_timer = QTimer(self)
         self._transient_refresh_timer.setSingleShot(True)
         self._transient_refresh_timer.timeout.connect(self._refresh_timed_overlay_state)
@@ -178,7 +216,6 @@ class OverlayWindow(QWidget):
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
             | Qt.WindowType.NoDropShadowWindowHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -1220,7 +1257,11 @@ class OverlayWindow(QWidget):
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         suppress_windows_native_frame(self)
+        force_windows_topmost(self)
         QTimer.singleShot(0, lambda: suppress_windows_native_frame(self))
+        QTimer.singleShot(0, lambda: force_windows_topmost(self))
+        if not self._hide_requested:
+            self._topmost_timer.start()
         if not self._initial_positioned:
             self._apply_window_mode()
             self._initial_positioned = True
@@ -1228,6 +1269,31 @@ class OverlayWindow(QWidget):
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._refresh_compact_text()
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
+            QTimer.singleShot(0, self._restore_visible_above_shell)
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        if self._allow_exit or self._hide_requested:
+            return
+        if event.spontaneous():
+            QTimer.singleShot(0, self._restore_visible_above_shell)
+
+    def _keep_topmost_above_shell(self) -> None:
+        if self._allow_exit or self._hide_requested or not self.isVisible() or self.isMinimized():
+            return
+        force_windows_topmost(self)
+
+    def _restore_visible_above_shell(self) -> None:
+        if self._allow_exit or self._hide_requested:
+            return
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.show()
+        self.raise_()
+        force_windows_topmost(self)
 
     def enterEvent(self, event) -> None:  # noqa: N802
         super().enterEvent(event)
@@ -1313,27 +1379,35 @@ class OverlayWindow(QWidget):
         self.hide_to_tray()
 
     def show_from_tray(self) -> None:
+        self._hide_requested = False
         was_visible = self.isVisible()
         self.show()
         self.raise_()
         self.activateWindow()
+        self._topmost_timer.start()
+        force_windows_topmost(self)
         if not was_visible:
             self.overlay_shown.emit()
 
     def hide_to_tray(self) -> None:
         was_visible = self.isVisible()
+        self._hide_requested = True
+        self._topmost_timer.stop()
         self.hide()
         if was_visible:
             self.overlay_hidden.emit()
 
     def open_settings_from_tray(self) -> None:
+        self._hide_requested = False
         was_visible = self.isVisible()
         if not was_visible:
             self.show()
+        self._topmost_timer.start()
         if not self._expanded:
             self.toggle_settings()
         self.raise_()
         self.activateWindow()
+        force_windows_topmost(self)
         if not was_visible:
             self.overlay_shown.emit()
 

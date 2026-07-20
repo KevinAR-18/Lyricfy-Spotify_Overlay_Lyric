@@ -12,6 +12,10 @@ from .models import TrackInfo
 SPOTIFY_SCOPES = "user-read-currently-playing user-read-playback-state"
 RATE_LIMIT_COOLDOWN_SECONDS = 60
 
+# Windows media session can occasionally reject a COM/WinRT call after running for
+# a long time. Treat it as a transient miss instead of showing raw HRESULT text.
+WINDOWS_MEDIA_TRANSIENT_WINERRORS = {-2147418110, -214741810}
+
 
 def stable_windows_track_id(source_app: str, artist: str, title: str, duration_ms: int) -> str:
     normalized_artist = " ".join(artist.casefold().split())
@@ -41,7 +45,12 @@ class WindowsMediaSpotifyClient:
         self._playback_status = GlobalSystemMediaTransportControlsSessionPlaybackStatus
 
     def get_current_track(self) -> TrackInfo | None:
-        return asyncio.run(self._get_current_track_async())
+        try:
+            return asyncio.run(self._get_current_track_async())
+        except OSError as exc:
+            if getattr(exc, "winerror", None) in WINDOWS_MEDIA_TRANSIENT_WINERRORS:
+                return None
+            raise
 
     async def _get_current_track_async(self) -> TrackInfo | None:
         manager = await self._manager_class.request_async()
