@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import time
 
-from PySide6.QtCore import QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtCore import QObject, QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -154,6 +154,21 @@ def force_windows_topmost(widget: QWidget) -> None:
         return
 
 
+class _PopupTopmostFilter(QObject):
+    def __init__(self, overlay: QWidget) -> None:
+        super().__init__(overlay)
+        self._overlay = overlay
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.Show:
+            self._overlay._topmost_timer.stop()
+        elif event.type() == QEvent.Type.Hide:
+            if self._overlay.isVisible() and not self._overlay._hide_requested:
+                self._overlay._topmost_timer.start()
+                force_windows_topmost(self._overlay)
+        return super().eventFilter(watched, event)
+
+
 class OverlayWindow(QWidget):
     save_requested = Signal(object)
     reconnect_requested = Signal()
@@ -200,6 +215,9 @@ class OverlayWindow(QWidget):
         self._hover_buttons_enabled = False
         self._mouse_over_overlay = False
         self._last_window_size: tuple[int, int] | None = None
+        self._last_screen = None
+        self._screen_signal_connected = False
+        self._popup_filters: list[_PopupTopmostFilter] = []
         self._resize_animation = QPropertyAnimation(self, b"geometry", self)
         self._resize_animation.setDuration(180)
         self._resize_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -301,6 +319,13 @@ class OverlayWindow(QWidget):
         self.shortcuts_label = QLabel(shortcuts_guide_text())
         self.shortcuts_label.setObjectName("shortcutsGuide")
         self.shortcuts_label.setWordWrap(True)
+
+        for combo_box in (
+            self.text_alignment_input,
+            self.startup_visibility_input,
+            self.font_family_input,
+        ):
+            self._install_popup_topmost_guard(combo_box)
 
         settings_actions = QHBoxLayout()
         settings_actions.setSpacing(8)
@@ -505,6 +530,11 @@ class OverlayWindow(QWidget):
         widget = QLineEdit()
         widget.setPlaceholderText(placeholder)
         return widget
+
+    def _install_popup_topmost_guard(self, combo_box: QComboBox) -> None:
+        popup_filter = _PopupTopmostFilter(self)
+        combo_box.view().window().installEventFilter(popup_filter)
+        self._popup_filters.append(popup_filter)
 
     def _create_field(self, label_text: str, input_widget: QWidget) -> QWidget:
         container = QWidget()
@@ -1254,8 +1284,25 @@ class OverlayWindow(QWidget):
             return
         self._position_top_center()
 
+    def _on_screen_changed(self, screen) -> None:
+        self._last_screen = screen
+        self._last_window_size = None
+        self._resize_animation.stop()
+        self._apply_window_mode()
+
+    def moveEvent(self, event) -> None:  # noqa: N802
+        super().moveEvent(event)
+        screen = self.screen()
+        if screen is not self._last_screen:
+            self._on_screen_changed(screen)
+
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        window_handle = self.windowHandle()
+        if window_handle is not None and not self._screen_signal_connected:
+            window_handle.screenChanged.connect(self._on_screen_changed)
+            self._screen_signal_connected = True
+        self._last_screen = self.screen()
         suppress_windows_native_frame(self)
         force_windows_topmost(self)
         QTimer.singleShot(0, lambda: suppress_windows_native_frame(self))
@@ -1283,7 +1330,14 @@ class OverlayWindow(QWidget):
             QTimer.singleShot(0, self._restore_visible_above_shell)
 
     def _keep_topmost_above_shell(self) -> None:
-        if self._allow_exit or self._hide_requested or not self.isVisible() or self.isMinimized():
+        if (
+            self._allow_exit
+            or self._hide_requested
+            or not self.isVisible()
+            or self.isMinimized()
+            or QApplication.activePopupWidget() is not None
+            or QApplication.activeModalWidget() is not None
+        ):
             return
         force_windows_topmost(self)
 
