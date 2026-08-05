@@ -182,6 +182,9 @@ class OverlayWindow(QWidget):
     _NO_LYRICS_NOTICE_SECONDS = 4.0
     _COMPACT_MIN_HEIGHT = 60
     _OVERLAY_CORNER_RADIUS = 30
+    _COMPACT_WINDOW_WIDTH = 620
+    _EXPANDED_WINDOW_WIDTH = 740
+    _API_COLUMN_EXTRA_WIDTH = 260
 
     def __init__(self) -> None:
         super().__init__()
@@ -395,20 +398,24 @@ class OverlayWindow(QWidget):
         credentials_layout.addWidget(self.client_id_field)
         credentials_layout.addWidget(self.client_secret_field)
         credentials_layout.addWidget(self.redirect_uri_field)
+        credentials_layout.addStretch(1)
         self.credentials_section = QWidget()
         self.credentials_section.setLayout(credentials_layout)
 
-        content_grid = QGridLayout()
-        content_grid.setContentsMargins(0, 0, 0, 0)
-        content_grid.setHorizontalSpacing(12)
-        content_grid.setVerticalSpacing(10)
-        content_grid.addLayout(left_column, 0, 0)
-        content_grid.addLayout(right_column, 0, 1)
-        content_grid.setColumnStretch(0, 1)
-        content_grid.setColumnStretch(1, 1)
+        # Spotify API menempati kolom ketiga agar panel melebar ke samping,
+        # bukan memanjang ke bawah saat mode API aktif.
+        self._content_grid = QGridLayout()
+        self._content_grid.setContentsMargins(0, 0, 0, 0)
+        self._content_grid.setHorizontalSpacing(12)
+        self._content_grid.setVerticalSpacing(10)
+        self._content_grid.addLayout(left_column, 0, 0)
+        self._content_grid.addLayout(right_column, 0, 1)
+        self._content_grid.addWidget(self.credentials_section, 0, 2)
+        self._content_grid.setColumnStretch(0, 1)
+        self._content_grid.setColumnStretch(1, 1)
+        self._content_grid.setColumnStretch(2, 0)
 
-        settings_layout.addLayout(content_grid)
-        settings_layout.addWidget(self.credentials_section)
+        settings_layout.addLayout(self._content_grid)
         settings_layout.addLayout(settings_actions)
         self.settings_panel.setMaximumHeight(0)
         self.settings_panel.hide()
@@ -1095,6 +1102,8 @@ class OverlayWindow(QWidget):
         self.credentials_section.setVisible(show_oauth_fields)
         for field in self._oauth_fields:
             field.setVisible(show_oauth_fields)
+        # Kolom Spotify API hanya ikut melebar saat mode API aktif.
+        self._content_grid.setColumnStretch(2, 1 if show_oauth_fields else 0)
 
     def _sync_overlay_buttons_ui(self) -> None:
         if self._hover_buttons_enabled:
@@ -1174,7 +1183,7 @@ class OverlayWindow(QWidget):
 
     def _apply_window_mode(self) -> None:
         width_bonus = max(0, self._lyric_font_size - 11) * 16
-        target_width = (620 + width_bonus) if not self._expanded else (740 + width_bonus)
+        target_width = self._target_window_width() + width_bonus
         if self._expanded:
             target_height = self._expanded_target_height(target_width)
         else:
@@ -1191,6 +1200,14 @@ class OverlayWindow(QWidget):
         self._resize_animation.stop()
         self.resize(target_width, target_height)
         self._reposition_after_resize()
+
+    def _target_window_width(self) -> int:
+        if not self._expanded:
+            return self._COMPACT_WINDOW_WIDTH
+        if self._playback_source == SPOTIFY_API_PLAYBACK_SOURCE:
+            # Mode API menampilkan kolom Spotify API tambahan di samping kanan.
+            return self._EXPANDED_WINDOW_WIDTH + self._API_COLUMN_EXTRA_WIDTH
+        return self._EXPANDED_WINDOW_WIDTH
 
     def _expanded_target_height(self, target_width: int) -> int:
         self.layout().activate()
@@ -1280,9 +1297,23 @@ class OverlayWindow(QWidget):
 
     def _reposition_after_resize(self) -> None:
         if self._user_positioned and self._snap_pos is not None:
+            self._snap_pos = self._clamped_horizontal_pos(self._snap_pos)
             self.move(self._snap_pos)
             return
         self._position_top_center()
+
+    def _clamped_horizontal_pos(self, pos: QPoint) -> QPoint:
+        # Hanya sumbu X yang dibatasi agar overlay tetap boleh menimpa taskbar.
+        screen = QApplication.screenAt(pos) or self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return pos
+
+        available = screen.availableGeometry()
+        max_x = available.right() - self.width() + 1
+        clamped_x = min(max(pos.x(), available.left()), max(available.left(), max_x))
+        if clamped_x == pos.x():
+            return pos
+        return QPoint(clamped_x, pos.y())
 
     def _on_screen_changed(self, screen) -> None:
         self._last_screen = screen
