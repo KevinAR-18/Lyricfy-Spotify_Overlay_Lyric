@@ -237,7 +237,7 @@ You can also change the mode from the tray menu:
 - `Mode` -> `Non-API` or `API`
 - `Overlay Buttons` -> show, hide, or enable hover-only mode for the overlay `Settings` and `Hide` buttons
 - `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
-- `Lyricfy v1.3.3`
+- `Lyricfy v1.3.4`
 
 Recommended value:
 
