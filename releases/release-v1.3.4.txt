@@ -1,0 +1,26 @@
+# Lyricfy v1.3.4 Release Notes
+
+## Highlights
+
+- Moved the `Spotify API` settings section next to the `Appearance` column so the settings panel grows sideways instead of stretching further down when `API` mode is active.
+- The overlay window now widens automatically in `API` mode and returns to its normal width in `Non-API` mode.
+- Fixed settings dropdowns being closed or covered by the overlay topmost enforcement.
+- Fixed overlay sizing and layout when the overlay is moved to another monitor.
+- Updated the app version display in the tray menu and build script to v1.3.4.
+
+## Improvements
+
+- The settings panel now uses a three column layout: `Text`, `Appearance`, and `Spotify API`.
+- The `Spotify API` column only takes horizontal space while `API` mode is selected, so `Non-API` mode keeps the previous compact settings layout.
+- Settings panel height in `API` mode now stays close to `Non-API` mode height, which keeps the panel usable on shorter screens.
+- The overlay is kept inside the horizontal screen bounds after it widens, so the settings panel does not get cut off near the right screen edge.
+
+## Fixes
+
+- Paused the topmost enforcement timer while a settings combo box popup is open, so `Text Alignment`, `Lyric Font`, and `Auto Start Mode` dropdowns stay open and clickable.
+- Re-applied overlay layout and window sizing when the overlay is dragged between monitors or when Windows reports a screen change.
+
+## Notes
+
+- Vertical overlay position is still not restricted, so the overlay can continue to sit above the Windows taskbar.
+- Playback mode, lyric fetching, settings values, and runtime data locations are unchanged.
