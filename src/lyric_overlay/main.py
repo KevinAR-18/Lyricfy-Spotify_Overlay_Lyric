@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, QtMsgType, qInstallMessageHandler
@@ -123,13 +124,12 @@ def main() -> int:
     overlay.load_config_values(config)
 
     def merge_config(base_config: AppConfig, updates: AppConfig) -> AppConfig:
-        return AppConfig(
+        return replace(
+            base_config,
             playback_source=updates.playback_source,
             spotify_client_id=updates.spotify_client_id,
             spotify_client_secret=updates.spotify_client_secret,
             spotify_redirect_uri=updates.spotify_redirect_uri or "http://127.0.0.1:8888/callback",
-            poll_interval_ms=base_config.poll_interval_ms,
-            lrclib_enabled=base_config.lrclib_enabled,
             auto_save_fetched_lrc=updates.auto_save_fetched_lrc,
             lyric_offset_ms=updates.lyric_offset_ms,
             overlay_bg_color=updates.overlay_bg_color or base_config.overlay_bg_color,
@@ -249,29 +249,7 @@ def main() -> int:
 
         def apply_playback_source(playback_source: str) -> None:
             base_config = load_config()
-            updated_config = AppConfig(
-                playback_source=playback_source,
-                spotify_client_id=base_config.spotify_client_id,
-                spotify_client_secret=base_config.spotify_client_secret,
-                spotify_redirect_uri=base_config.spotify_redirect_uri,
-                poll_interval_ms=base_config.poll_interval_ms,
-                lrclib_enabled=base_config.lrclib_enabled,
-                auto_save_fetched_lrc=base_config.auto_save_fetched_lrc,
-                lyric_offset_ms=base_config.lyric_offset_ms,
-                overlay_bg_color=base_config.overlay_bg_color,
-                overlay_text_color=base_config.overlay_text_color,
-                lyric_text_color=base_config.lyric_text_color,
-                lyric_glow_color=base_config.lyric_glow_color,
-                lyric_toggle_color=base_config.lyric_toggle_color,
-                lyric_font_family=base_config.lyric_font_family,
-                lyric_font_size=base_config.lyric_font_size,
-                text_alignment=base_config.text_alignment,
-                show_settings_button=base_config.show_settings_button,
-                show_hide_button=base_config.show_hide_button,
-                hover_buttons_enabled=base_config.hover_buttons_enabled,
-                autostart_enabled=base_config.autostart_enabled,
-                autostart_start_hidden=base_config.autostart_start_hidden,
-            )
+            updated_config = replace(base_config, playback_source=playback_source)
             save_config(updated_config)
             overlay.load_config_values(updated_config)
             controller.config = updated_config
@@ -291,23 +269,8 @@ def main() -> int:
             hover_buttons_enabled: bool | None = None,
         ) -> None:
             base_config = load_config()
-            updated_config = AppConfig(
-                playback_source=base_config.playback_source,
-                spotify_client_id=base_config.spotify_client_id,
-                spotify_client_secret=base_config.spotify_client_secret,
-                spotify_redirect_uri=base_config.spotify_redirect_uri,
-                poll_interval_ms=base_config.poll_interval_ms,
-                lrclib_enabled=base_config.lrclib_enabled,
-                auto_save_fetched_lrc=base_config.auto_save_fetched_lrc,
-                lyric_offset_ms=base_config.lyric_offset_ms,
-                overlay_bg_color=base_config.overlay_bg_color,
-                overlay_text_color=base_config.overlay_text_color,
-                lyric_text_color=base_config.lyric_text_color,
-                lyric_glow_color=base_config.lyric_glow_color,
-                lyric_toggle_color=base_config.lyric_toggle_color,
-                lyric_font_family=base_config.lyric_font_family,
-                lyric_font_size=base_config.lyric_font_size,
-                text_alignment=base_config.text_alignment,
+            updated_config = replace(
+                base_config,
                 show_settings_button=(
                     base_config.show_settings_button
                     if show_settings_button is None
@@ -323,8 +286,6 @@ def main() -> int:
                     if hover_buttons_enabled is None
                     else hover_buttons_enabled
                 ),
-                autostart_enabled=base_config.autostart_enabled,
-                autostart_start_hidden=base_config.autostart_start_hidden,
             )
             save_config(updated_config)
             overlay.load_config_values(updated_config)
@@ -337,26 +298,8 @@ def main() -> int:
             autostart_start_hidden: bool | None = None,
         ) -> None:
             base_config = load_config()
-            updated_config = AppConfig(
-                playback_source=base_config.playback_source,
-                spotify_client_id=base_config.spotify_client_id,
-                spotify_client_secret=base_config.spotify_client_secret,
-                spotify_redirect_uri=base_config.spotify_redirect_uri,
-                poll_interval_ms=base_config.poll_interval_ms,
-                lrclib_enabled=base_config.lrclib_enabled,
-                auto_save_fetched_lrc=base_config.auto_save_fetched_lrc,
-                lyric_offset_ms=base_config.lyric_offset_ms,
-                overlay_bg_color=base_config.overlay_bg_color,
-                overlay_text_color=base_config.overlay_text_color,
-                lyric_text_color=base_config.lyric_text_color,
-                lyric_glow_color=base_config.lyric_glow_color,
-                lyric_toggle_color=base_config.lyric_toggle_color,
-                lyric_font_family=base_config.lyric_font_family,
-                lyric_font_size=base_config.lyric_font_size,
-                text_alignment=base_config.text_alignment,
-                show_settings_button=base_config.show_settings_button,
-                show_hide_button=base_config.show_hide_button,
-                hover_buttons_enabled=base_config.hover_buttons_enabled,
+            updated_config = replace(
+                base_config,
                 autostart_enabled=(
                     base_config.autostart_enabled
                     if autostart_enabled is None
@@ -447,28 +390,15 @@ def main() -> int:
         sync_startup_actions(saved_config)
 
     def toggle_lyric_color(updated_config: AppConfig) -> None:
-        saved_config = AppConfig(
+        saved_config = replace(
+            updated_config,
             playback_source=controller.config.playback_source,
             spotify_client_id=controller.config.spotify_client_id,
             spotify_client_secret=controller.config.spotify_client_secret,
             spotify_redirect_uri=controller.config.spotify_redirect_uri,
             poll_interval_ms=controller.config.poll_interval_ms,
             lrclib_enabled=controller.config.lrclib_enabled,
-            auto_save_fetched_lrc=updated_config.auto_save_fetched_lrc,
-            lyric_offset_ms=updated_config.lyric_offset_ms,
-            overlay_bg_color=updated_config.overlay_bg_color,
-            overlay_text_color=updated_config.overlay_text_color,
             lyric_text_color=updated_config.lyric_text_color or controller.config.lyric_text_color,
-            lyric_glow_color=updated_config.lyric_glow_color,
-            lyric_toggle_color=updated_config.lyric_toggle_color,
-            lyric_font_family=updated_config.lyric_font_family,
-            lyric_font_size=updated_config.lyric_font_size,
-            text_alignment=updated_config.text_alignment,
-            show_settings_button=updated_config.show_settings_button,
-            show_hide_button=updated_config.show_hide_button,
-            hover_buttons_enabled=updated_config.hover_buttons_enabled,
-            autostart_enabled=updated_config.autostart_enabled,
-            autostart_start_hidden=updated_config.autostart_start_hidden,
         )
         save_config(saved_config)
         controller.config = saved_config
