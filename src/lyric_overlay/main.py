@@ -14,6 +14,7 @@ START_HIDDEN_ARG = "--start-hidden"
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from lyric_overlay import __version__
     from lyric_overlay.app_controller import AppController
     from lyric_overlay.config import (
         AppConfig,
@@ -29,6 +30,7 @@ if __package__ in (None, ""):
     from lyric_overlay.overlay import OverlayWindow, create_application
     from lyric_overlay.spotify_client import PlaybackClient, create_playback_client
 else:
+    from . import __version__
     from .app_controller import AppController
     from .config import (
         AppConfig,
@@ -223,7 +225,7 @@ def main() -> int:
         startup_menu.addSeparator()
         startup_menu.addAction(autostart_show_action)
         startup_menu.addAction(autostart_hidden_action)
-        signature_action = QAction("Lyricfy v1.3.4", tray_menu)
+        signature_action = QAction(f"Lyricfy v{__version__}", tray_menu)
         signature_action.setEnabled(False)
         exit_action = QAction("Exit", tray_menu)
         tray_menu.addAction(show_action)
