@@ -24,6 +24,10 @@ class PlaybackWorker(QObject):
     refreshed = Signal(object)
     failed = Signal(str)
 
+    # Error sesaat dari media session/COM tidak perlu ditampilkan ke user;
+    # polling berikutnya biasanya langsung berhasil lagi.
+    _TRANSIENT_WINERRORS = {-2147418110, -214741810}
+
     def __init__(self, playback_client: PlaybackClient, poll_interval_ms: int) -> None:
         super().__init__()
         self.playback_client = playback_client
@@ -49,8 +53,13 @@ class PlaybackWorker(QObject):
             try:
                 self.refreshed.emit(self.playback_client.get_current_track())
             except Exception as exc:  # noqa: BLE001
-                self.failed.emit(str(exc))
+                if not self._is_transient_error(exc):
+                    self.failed.emit(str(exc))
             self._stop_event.wait(self.poll_interval_ms / 1000)
+
+    def _is_transient_error(self, exc: Exception) -> bool:
+        return getattr(exc, "winerror", None) in self._TRANSIENT_WINERRORS
+
 
 
 class LyricsWorker(QObject):
