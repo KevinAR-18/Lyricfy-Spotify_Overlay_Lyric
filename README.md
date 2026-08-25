@@ -141,6 +141,9 @@ LYRIC_TOGGLE_COLOR=#1A1A1A
 LYRIC_FONT_FAMILY=Segoe UI
 LYRIC_FONT_SIZE=11
 TEXT_ALIGNMENT=left
+DISPLAY_STYLE=card
+LYRIC_LINES=single
+TRACK_INFO_MODE=track_change
 SHOW_SETTINGS_BUTTON=true
 SHOW_HIDE_BUTTON=true
 HOVER_BUTTONS_ENABLED=false
@@ -204,12 +207,19 @@ If Spotify login was already cached before these read-only scopes were added, de
 
 The built-in settings panel supports:
 
+- Display presets: `Card Default`, `Floating Minimal`, and `Floating Context`
+- Detailed display controls for card/floating style, single/current-next lyrics, and track information visibility
+
 - Automatically hides Spotify API credential fields while `Non-API` mode is active
 - Spotify Client ID
 - Spotify Client Secret
 - Redirect URI
 - Lyric Offset (ms)
 - Text Alignment
+- Display Preset
+- Display Style
+- Lyric Lines
+- Track Information
 - Lyric Font
 - Font Size
 - Overlay Color
@@ -224,6 +234,15 @@ The built-in settings panel supports:
 
 Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl+R` to reconnect with the latest credentials.
 
+### Display Presets
+
+- `Card Default` keeps the original rounded lyric card with one active lyric line.
+- `Floating Minimal` hides the card and track information so only the active lyric remains. A subtle background and the overlay buttons appear on hover.
+- `Floating Context` adds the next lyric below the active lyric in a smaller, dimmer style.
+- Floating presets always show Settings and Hide controls on hover. `Card Controls on Hover` only changes the behavior of `Card Default`.
+- Changing the detailed display controls to a combination that does not match a built-in preset is shown as `Custom`.
+- Opening Settings always restores the full card temporarily so the controls remain readable.
+
 `PLAYBACK_SOURCE` supports:
 
 - `windows` for local Windows media session playback detection
@@ -235,9 +254,10 @@ You can also change the mode from the tray menu:
 - `Hide Overlay`
 - `Open Settings`
 - `Mode` -> `Non-API` or `API`
-- `Overlay Buttons` -> show, hide, or enable hover-only mode for the overlay `Settings` and `Hide` buttons
+- `Overlay Controls` -> show or hide the overlay controls and enable `Card Controls on Hover`
 - `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
-- `Lyricfy v1.3.5`
+- `Display Preset` -> `Card Default`, `Floating Minimal`, or `Floating Context`
+- `Lyricfy v1.4.0`
 
 Recommended value:
 
