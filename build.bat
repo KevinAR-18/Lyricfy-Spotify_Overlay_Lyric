@@ -1,9 +1,9 @@
 @echo off
 setlocal
-set VERSION=v1.3.5
+set VERSION=v1.4.0
 
 echo ========================================
-echo Building Lyricfy %VERSION%...
+echo Building Lyricfy %VERSION%....
 echo ========================================
 echo.
 
