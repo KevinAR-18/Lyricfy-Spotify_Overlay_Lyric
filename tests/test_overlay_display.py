@@ -7,6 +7,8 @@ from lyric_overlay.config import (
     default_config,
 )
 from lyric_overlay.overlay import OverlayWindow, create_application
+from PySide6.QtCore import QByteArray, QBuffer, QIODevice
+from PySide6.QtGui import QColor, QImage
 
 
 def _overlay():
@@ -14,6 +16,16 @@ def _overlay():
     overlay = OverlayWindow()
     overlay.load_config_values(default_config())
     return overlay
+
+
+def _image_bytes():
+    image = QImage(16, 16, QImage.Format.Format_ARGB32)
+    image.fill(QColor("red"))
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(buffer, "PNG")
+    return bytes(data)
 
 
 def test_floating_minimal_hides_next_line():
@@ -136,3 +148,29 @@ def test_card_preset_restores_saved_hover_preference():
     overlay.apply_display_preset(CARD_DEFAULT_PRESET)
     assert overlay._hover_buttons_enabled is True
     assert overlay._uses_hover_controls() is True
+
+
+def test_album_cover_is_hidden_by_default():
+    overlay = _overlay()
+    overlay.set_album_cover(_image_bytes())
+    assert overlay.album_cover_label.isHidden()
+
+
+def test_album_cover_shows_only_in_card_mode():
+    overlay = _overlay()
+    overlay._show_album_cover = True
+    overlay.set_album_cover(_image_bytes())
+    assert not overlay.album_cover_label.isHidden()
+    overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
+    assert overlay.album_cover_label.isHidden()
+    overlay.apply_display_preset(CARD_DEFAULT_PRESET)
+    assert not overlay.album_cover_label.isHidden()
+
+
+def test_invalid_or_missing_cover_collapses_layout():
+    overlay = _overlay()
+    overlay._show_album_cover = True
+    overlay.set_album_cover(b"not-an-image")
+    assert overlay.album_cover_label.isHidden()
+    overlay.set_album_cover(None)
+    assert overlay.album_cover_label.isHidden()

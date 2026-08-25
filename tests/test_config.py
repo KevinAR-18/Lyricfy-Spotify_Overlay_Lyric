@@ -52,6 +52,7 @@ class TestDefaultConfig:
         assert cfg.poll_interval_ms == 1000
         assert cfg.lrclib_enabled is True
         assert cfg.text_alignment == "left"
+        assert cfg.show_album_cover is False
         assert display_preset_for(cfg) == CARD_DEFAULT_PRESET
 
 
@@ -97,6 +98,7 @@ class TestSaveLoadRoundTrip:
         original.display_style = "floating"
         original.lyric_lines = "current_next"
         original.track_info_mode = "always"
+        original.show_album_cover = True
 
         config_module.save_config(original)
         assert env_file.exists()
@@ -111,3 +113,4 @@ class TestSaveLoadRoundTrip:
         assert loaded.display_style == "floating"
         assert loaded.lyric_lines == "current_next"
         assert loaded.track_info_mode == "always"
+        assert loaded.show_album_cover is True
