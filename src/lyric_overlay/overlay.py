@@ -4,7 +4,7 @@ import sys
 import time
 
 from PySide6.QtCore import QObject, QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -200,6 +200,7 @@ class OverlayWindow(QWidget):
     _COMPACT_WINDOW_WIDTH = 620
     _EXPANDED_WINDOW_WIDTH = 740
     _API_COLUMN_EXTRA_WIDTH = 260
+    _ALBUM_COVER_SIZE = 48
 
     def __init__(self) -> None:
         super().__init__()
@@ -231,6 +232,8 @@ class OverlayWindow(QWidget):
         self._display_style = CARD_DISPLAY_STYLE
         self._lyric_lines = SINGLE_LYRIC_LINES
         self._track_info_mode = TRACK_CHANGE_INFO_MODE
+        self._show_album_cover = False
+        self._album_cover_source: QPixmap | None = None
         self._playback_source = WINDOWS_PLAYBACK_SOURCE
         self._show_settings_button = True
         self._show_hide_button = True
@@ -351,6 +354,10 @@ class OverlayWindow(QWidget):
         self.glow_color_input = self._create_input("Example: #66CCFFFF")
         self.toggle_color_input = self._create_input("Example: #1A1A1A")
         self.auto_save_lrc_checkbox = QCheckBox("Save fetched lyrics as local .lrc cache")
+        self.show_album_cover_checkbox = QCheckBox("Show album cover in Card mode")
+        self.show_album_cover_checkbox.setToolTip(
+            "Artwork is shown in Card mode when available. Floating presets remain text-only."
+        )
         self.hover_buttons_checkbox = QCheckBox("Card controls on hover")
         self.hover_buttons_checkbox.setToolTip(
             "Floating presets always show Settings and Hide controls on hover."
@@ -435,6 +442,7 @@ class OverlayWindow(QWidget):
         right_column.addWidget(self._create_field("Lyric Color", self.lyric_color_input))
         right_column.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
         right_column.addWidget(self._create_field("Toggle Lyric Color", self.toggle_color_input))
+        right_column.addWidget(self.show_album_cover_checkbox)
         right_column.addStretch(1)
 
         credentials_layout = QVBoxLayout()
@@ -466,14 +474,27 @@ class OverlayWindow(QWidget):
         self.settings_panel.setMaximumHeight(0)
         self.settings_panel.hide()
 
-        card_layout.addLayout(header_layout)
+        self.album_cover_label = QLabel("")
+        self.album_cover_label.setFixedSize(self._ALBUM_COVER_SIZE, self._ALBUM_COVER_SIZE)
+        self.album_cover_label.hide()
+        self._compact_text_widget = QWidget()
+        compact_text_layout = QVBoxLayout(self._compact_text_widget)
+        compact_text_layout.setContentsMargins(0, 0, 0, 0)
+        compact_text_layout.setSpacing(6)
+        compact_text_layout.addLayout(header_layout)
         self.next_line_label = QLabel("")
         self.next_line_label.setObjectName("nextLyric")
         self.next_line_label.setWordWrap(True)
         self.next_line_label.hide()
-        card_layout.addWidget(self.next_line_label)
-        card_layout.addWidget(self.track_title_label)
-        card_layout.addWidget(self.status_label)
+        compact_text_layout.addWidget(self.next_line_label)
+        compact_text_layout.addWidget(self.track_title_label)
+        compact_text_layout.addWidget(self.status_label)
+        compact_row = QHBoxLayout()
+        compact_row.setContentsMargins(0, 0, 0, 0)
+        compact_row.setSpacing(10)
+        compact_row.addWidget(self.album_cover_label, 0, Qt.AlignmentFlag.AlignTop)
+        compact_row.addWidget(self._compact_text_widget, 1)
+        card_layout.addLayout(compact_row)
         card_layout.addWidget(self.settings_panel)
 
         self._lyric_glow = QGraphicsDropShadowEffect(self)
@@ -692,6 +713,8 @@ class OverlayWindow(QWidget):
         else:
             self._last_non_toggle_lyric_color = config.lyric_text_color or self._DEFAULT_LYRIC_COLOR
         self.auto_save_lrc_checkbox.setChecked(config.auto_save_fetched_lrc)
+        self._show_album_cover = config.show_album_cover
+        self.show_album_cover_checkbox.setChecked(config.show_album_cover)
         self._show_settings_button = config.show_settings_button
         self._show_hide_button = config.show_hide_button
         self._hover_buttons_enabled = config.hover_buttons_enabled
@@ -700,6 +723,7 @@ class OverlayWindow(QWidget):
         self._set_startup_visibility_selection(config.autostart_start_hidden)
         self._sync_playback_source_ui()
         self._sync_overlay_buttons_ui()
+        self._sync_album_cover_ui()
         self._refresh_compact_text()
         self.apply_config_theme(config)
         self._refresh_layout_after_settings_change()
@@ -730,6 +754,7 @@ class OverlayWindow(QWidget):
             display_style=self.display_style_input.currentData(),
             lyric_lines=self.lyric_lines_input.currentData(),
             track_info_mode=self.track_info_mode_input.currentData(),
+            show_album_cover=self.show_album_cover_checkbox.isChecked(),
             show_settings_button=self._show_settings_button,
             show_hide_button=self._show_hide_button,
             hover_buttons_enabled=self.hover_buttons_checkbox.isChecked(),
@@ -749,7 +774,9 @@ class OverlayWindow(QWidget):
         self._display_style = config.display_style or CARD_DISPLAY_STYLE
         self._lyric_lines = config.lyric_lines or SINGLE_LYRIC_LINES
         self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
+        self._show_album_cover = config.show_album_cover
         self._apply_theme()
+        self._sync_album_cover_ui()
 
     def set_playback_source(self, playback_source: str) -> None:
         self._playback_source = playback_source or WINDOWS_PLAYBACK_SOURCE
@@ -766,10 +793,56 @@ class OverlayWindow(QWidget):
         self._set_combo_data(self.track_info_mode_input, self._track_info_mode)
         self._set_combo_data(self.display_preset_input, preset)
         self._sync_overlay_buttons_ui()
+        self._sync_album_cover_ui()
         self._refresh_compact_text()
         self._last_window_size = None
         self._apply_window_mode()
         self.update()
+
+    def set_album_cover(self, data: bytes | None) -> None:
+        pixmap = QPixmap()
+        if data and pixmap.loadFromData(data):
+            self._album_cover_source = pixmap
+        else:
+            self._album_cover_source = None
+        self._sync_album_cover_ui()
+
+    def _sync_album_cover_ui(self) -> None:
+        should_show = (
+            self._show_album_cover
+            and self._display_style == CARD_DISPLAY_STYLE
+            and not self._expanded
+            and self._album_cover_source is not None
+        )
+        if should_show:
+            self.album_cover_label.setPixmap(self._rounded_cover_pixmap(self._album_cover_source))
+        else:
+            self.album_cover_label.clear()
+        self.album_cover_label.setVisible(should_show)
+        self._last_window_size = None
+        self._apply_window_mode_if_needed()
+
+    def _rounded_cover_pixmap(self, source: QPixmap) -> QPixmap:
+        size = self._ALBUM_COVER_SIZE
+        scaled = source.scaled(
+            size,
+            size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = max(0, (scaled.width() - size) // 2)
+        y = max(0, (scaled.height() - size) // 2)
+        cropped = scaled.copy(x, y, size, size)
+        rounded = QPixmap(size, size)
+        rounded.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, size, size), 8, 8)
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, cropped)
+        painter.end()
+        return rounded
         self.update()
 
     def playback_source(self) -> str:
