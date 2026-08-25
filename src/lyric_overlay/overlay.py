@@ -1264,9 +1264,10 @@ class OverlayWindow(QWidget):
 
     def _sync_overlay_buttons_ui(self) -> None:
         if self._uses_hover_controls():
-            visible_on_hover = self._mouse_over_overlay or self._expanded
-            self.settings_button.setVisible(visible_on_hover)
-            self.close_button.setVisible(visible_on_hover)
+            self.settings_button.setVisible(
+                self._expanded or (self._mouse_over_overlay and self._show_settings_button)
+            )
+            self.close_button.setVisible(self._mouse_over_overlay and self._show_hide_button)
             return
 
         self.settings_button.setVisible(self._show_settings_button or self._expanded)

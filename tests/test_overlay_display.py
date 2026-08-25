@@ -61,7 +61,7 @@ def test_card_hover_checkbox_previews_without_save():
     assert not overlay.close_button.isHidden()
 
 
-def test_floating_always_uses_hover_controls():
+def test_floating_hover_shows_enabled_controls():
     overlay = _overlay()
     overlay.hover_buttons_checkbox.setChecked(False)
     overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
@@ -78,14 +78,55 @@ def test_floating_always_uses_hover_controls():
     assert not overlay.close_button.isHidden()
 
 
+def test_floating_hover_hides_both_disabled_controls():
+    overlay = _overlay()
+    overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
+    overlay.set_overlay_buttons_visibility(False, False)
+    overlay._mouse_over_overlay = True
+    overlay._sync_overlay_buttons_ui()
+    assert overlay.settings_button.isHidden()
+    assert overlay.close_button.isHidden()
+
+
+def test_floating_hover_can_show_only_settings():
+    overlay = _overlay()
+    overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
+    overlay.set_overlay_buttons_visibility(True, False)
+    overlay._mouse_over_overlay = True
+    overlay._sync_overlay_buttons_ui()
+    assert not overlay.settings_button.isHidden()
+    assert overlay.close_button.isHidden()
+
+
+def test_floating_hover_can_show_only_hide():
+    overlay = _overlay()
+    overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
+    overlay.set_overlay_buttons_visibility(False, True)
+    overlay._mouse_over_overlay = True
+    overlay._sync_overlay_buttons_ui()
+    assert overlay.settings_button.isHidden()
+    assert not overlay.close_button.isHidden()
+
+
+def test_card_hover_respects_disabled_controls():
+    overlay = _overlay()
+    overlay.hover_buttons_checkbox.setChecked(True)
+    overlay.set_overlay_buttons_visibility(False, False)
+    overlay._mouse_over_overlay = True
+    overlay._sync_overlay_buttons_ui()
+    assert overlay.settings_button.isHidden()
+    assert overlay.close_button.isHidden()
+
+
 def test_settings_keep_controls_visible_in_floating_mode():
     overlay = _overlay()
     overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
     overlay._expanded = True
+    overlay.set_overlay_buttons_visibility(False, False)
     overlay._mouse_over_overlay = False
     overlay._sync_overlay_buttons_ui()
     assert not overlay.settings_button.isHidden()
-    assert not overlay.close_button.isHidden()
+    assert overlay.close_button.isHidden()
 
 
 def test_card_preset_restores_saved_hover_preference():
