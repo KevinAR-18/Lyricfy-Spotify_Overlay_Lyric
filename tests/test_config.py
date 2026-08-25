@@ -1,11 +1,18 @@
-import importlib
-
 from lyric_overlay import config as config_module
 from lyric_overlay.config import (
+    CARD_DEFAULT_PRESET,
+    CUSTOM_DISPLAY_PRESET,
+    FLOATING_CONTEXT_PRESET,
+    FLOATING_MINIMAL_PRESET,
     WINDOWS_PLAYBACK_SOURCE,
+    _normalize_display_style,
+    _normalize_lyric_lines,
     _normalize_playback_source,
     _normalize_text_alignment,
+    _normalize_track_info_mode,
     default_config,
+    display_preset_for,
+    display_preset_values,
 )
 
 
@@ -45,6 +52,34 @@ class TestDefaultConfig:
         assert cfg.poll_interval_ms == 1000
         assert cfg.lrclib_enabled is True
         assert cfg.text_alignment == "left"
+        assert display_preset_for(cfg) == CARD_DEFAULT_PRESET
+
+
+class TestDisplayConfig:
+    def test_invalid_values_fall_back_to_defaults(self):
+        assert _normalize_display_style("invalid") == "card"
+        assert _normalize_lyric_lines("invalid") == "single"
+        assert _normalize_track_info_mode("invalid") == "track_change"
+
+    def test_builtin_presets(self):
+        config = default_config()
+        for preset in (
+            CARD_DEFAULT_PRESET,
+            FLOATING_MINIMAL_PRESET,
+            FLOATING_CONTEXT_PRESET,
+        ):
+            style, lines, info = display_preset_values(preset)
+            config.display_style = style
+            config.lyric_lines = lines
+            config.track_info_mode = info
+            assert display_preset_for(config) == preset
+
+    def test_custom_combination(self):
+        config = default_config()
+        config.display_style = "floating"
+        config.lyric_lines = "current_next"
+        config.track_info_mode = "always"
+        assert display_preset_for(config) == CUSTOM_DISPLAY_PRESET
 
 
 class TestSaveLoadRoundTrip:
@@ -59,6 +94,9 @@ class TestSaveLoadRoundTrip:
         original.text_alignment = "center"
         original.lrclib_enabled = False
         original.autostart_enabled = True
+        original.display_style = "floating"
+        original.lyric_lines = "current_next"
+        original.track_info_mode = "always"
 
         config_module.save_config(original)
         assert env_file.exists()
@@ -70,3 +108,6 @@ class TestSaveLoadRoundTrip:
         assert loaded.lrclib_enabled is False
         assert loaded.autostart_enabled is True
         assert loaded.playback_source == original.playback_source
+        assert loaded.display_style == "floating"
+        assert loaded.lyric_lines == "current_next"
+        assert loaded.track_info_mode == "always"
