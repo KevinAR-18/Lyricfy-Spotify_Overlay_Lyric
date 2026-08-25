@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE
+from .cover_art import CoverArtRepository
 from .lyrics import LyricsRepository
 from .models import LyricsData, TrackInfo
 from .overlay import OverlayWindow
@@ -86,6 +87,21 @@ class LyricsWorker(QObject):
         self.fetched.emit(track.track_id, lyrics, request_id)
 
 
+class CoverArtWorker(QObject):
+    fetched = Signal(str, object, int)
+
+    def __init__(self, repository: CoverArtRepository) -> None:
+        super().__init__()
+        self.repository = repository
+
+    def fetch(self, track: TrackInfo, request_id: int) -> None:
+        threading.Thread(target=self._run, args=(track, request_id), daemon=True).start()
+
+    def _run(self, track: TrackInfo, request_id: int) -> None:
+        data = self.repository.get_cover(track)
+        self.fetched.emit(track.track_id, data, request_id)
+
+
 class AppController(QObject):
     _RENDER_INTERVAL_MS = 50
     _MAX_LYRICS_RETRIES = 3
@@ -108,15 +124,18 @@ class AppController(QObject):
         self.snapshot = PlaybackSnapshot()
         self.worker: PlaybackWorker | None = None
         self.lyrics_worker = LyricsWorker(lyrics_repository)
+        self.cover_worker = CoverArtWorker(CoverArtRepository())
         self._last_track_refresh_at = 0.0
         self._last_rendered_line: tuple[str, str] | None = None
         self._lyrics_request_id = 0
         self._lyrics_retry_count = 0
         self._lyrics_retry_due_at = 0.0
+        self._cover_request_id = 0
         self._render_timer = QTimer(self)
         self._render_timer.setInterval(self._RENDER_INTERVAL_MS)
         self._render_timer.timeout.connect(self._render_current_state)
         self.lyrics_worker.fetched.connect(self._apply_fetched_lyrics)
+        self.cover_worker.fetched.connect(self._apply_fetched_cover)
 
     def start(self) -> None:
         if self.playback_client is None:
@@ -146,6 +165,7 @@ class AppController(QObject):
         self._lyrics_request_id = 0
         self._lyrics_retry_count = 0
         self._lyrics_retry_due_at = 0.0
+        self._cover_request_id += 1
         self.sync_engine.set_lyrics(LyricsData(source="none", lines=[]))
         self.overlay.load_config_values(config)
         if self.playback_client is None:
@@ -174,9 +194,11 @@ class AppController(QObject):
             self._lyrics_request_id += 1
             self._lyrics_retry_count = 0
             self._lyrics_retry_due_at = 0.0
+            self._cover_request_id += 1
             self.snapshot = PlaybackSnapshot(track=None, lyrics=LyricsData(source="none", lines=[]))
             self.sync_engine.set_lyrics(self.snapshot.lyrics)
             self.overlay.set_track(None)
+            self.overlay.set_album_cover(None)
             self.overlay.set_lines("", "")
             self.overlay.show_status("")
             return
@@ -187,6 +209,10 @@ class AppController(QObject):
             self._lyrics_retry_count = 0
             self._lyrics_retry_due_at = 0.0
             self.snapshot = PlaybackSnapshot(track=track, lyrics=LyricsData(source="none", lines=[]))
+            self._cover_request_id += 1
+            self.overlay.set_album_cover(None)
+            if self.config.show_album_cover:
+                self.cover_worker.fetch(track, self._cover_request_id)
             self._request_lyrics(track)
         else:
             self.snapshot.track = track
@@ -205,6 +231,21 @@ class AppController(QObject):
             self.overlay.show_status("")
 
         self._render_current_state()
+
+    def refresh_album_cover(self) -> None:
+        self._cover_request_id += 1
+        self.overlay.set_album_cover(None)
+        track = self.snapshot.track
+        if self.config.show_album_cover and track is not None:
+            self.cover_worker.fetch(track, self._cover_request_id)
+
+    def _apply_fetched_cover(self, track_id: str, data: bytes | None, request_id: int) -> None:
+        track = self.snapshot.track
+        if track is None or track.track_id != track_id or request_id != self._cover_request_id:
+            return
+        if not self.config.show_album_cover:
+            return
+        self.overlay.set_album_cover(data)
 
     def show_error(self, message: str) -> None:
         self.overlay.show_status(self._format_error_message(message))

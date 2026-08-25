@@ -452,6 +452,7 @@ def main() -> int:
         overlay.show_status("Settings saved to .env")
         controller.config = saved_config
         controller.lyrics_repository.set_auto_save_fetched_lrc(saved_config.auto_save_fetched_lrc)
+        controller.refresh_album_cover()
         sync_mode_actions(saved_config.playback_source)
         sync_overlay_button_actions(saved_config)
         sync_startup_actions(saved_config)
