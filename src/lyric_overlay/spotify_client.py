@@ -15,6 +15,7 @@ RATE_LIMIT_COOLDOWN_SECONDS = 60
 # Windows media session can occasionally reject a COM/WinRT call after running for
 # a long time. Treat it as a transient miss instead of showing raw HRESULT text.
 WINDOWS_MEDIA_TRANSIENT_WINERRORS = {-2147418110, -214741810}
+MAX_WINDOWS_COVER_BYTES = 8 * 1024 * 1024
 
 
 def stable_windows_track_id(source_app: str, artist: str, title: str, duration_ms: int) -> str:
@@ -43,6 +44,8 @@ class WindowsMediaSpotifyClient:
 
         self._manager_class = GlobalSystemMediaTransportControlsSessionManager
         self._playback_status = GlobalSystemMediaTransportControlsSessionPlaybackStatus
+        self._cover_cache: dict[str, bytes] = {}
+        self._cover_retry_at: dict[str, float] = {}
 
     def get_current_track(self) -> TrackInfo | None:
         try:
@@ -83,14 +86,22 @@ class WindowsMediaSpotifyClient:
             0,
         )
         source_app = (session.source_app_user_model_id or "").strip() or "Spotify.exe"
+        track_id = stable_windows_track_id(
+            source_app=source_app,
+            artist=artist,
+            title=title,
+            duration_ms=duration_ms,
+        )
+        cover_data = self._cover_cache.get(track_id)
+        if cover_data is None and time.monotonic() >= self._cover_retry_at.get(track_id, 0.0):
+            cover_data = await self._read_thumbnail_bytes(getattr(media, "thumbnail", None))
+            if cover_data:
+                self._cover_cache[track_id] = cover_data
+            else:
+                self._cover_retry_at[track_id] = time.monotonic() + 5.0
 
         return TrackInfo(
-            track_id=stable_windows_track_id(
-                source_app=source_app,
-                artist=artist,
-                title=title,
-                duration_ms=duration_ms,
-            ),
+            track_id=track_id,
             title=title,
             artist=artist or "Unknown artist",
             album=(media.album_title or "").strip(),
@@ -98,7 +109,34 @@ class WindowsMediaSpotifyClient:
             progress_ms=min(progress_ms, duration_ms) if duration_ms > 0 else progress_ms,
             is_playing=is_playing,
             cover_url=None,
+            cover_data=cover_data,
         )
+
+    @staticmethod
+    async def _read_thumbnail_bytes(thumbnail) -> bytes | None:
+        if thumbnail is None:
+            return None
+        try:
+            from winsdk.windows.storage.streams import DataReader
+
+            stream = await thumbnail.open_read_async()
+            size = int(stream.size)
+            if size <= 0 or size > MAX_WINDOWS_COVER_BYTES:
+                stream.close()
+                return None
+            input_stream = stream.get_input_stream_at(0)
+            reader = DataReader(input_stream)
+            loaded = await reader.load_async(size)
+            if loaded <= 0:
+                reader.close()
+                stream.close()
+                return None
+            data = bytes(reader.read_bytes(loaded))
+            reader.close()
+            stream.close()
+            return data or None
+        except (AttributeError, OSError, RuntimeError, ValueError):
+            return None
 
     def _pick_spotify_session(self, current_session, sessions):
         if current_session is not None and self._is_spotify_session(current_session):
@@ -194,6 +232,7 @@ class SpotifyApiClient:
             progress_ms=payload.get("progress_ms", 0),
             is_playing=payload.get("is_playing", False),
             cover_url=images[0]["url"] if images else None,
+            cover_data=None,
         )
 
     def raw_playback_state(self) -> dict[str, Any] | None:

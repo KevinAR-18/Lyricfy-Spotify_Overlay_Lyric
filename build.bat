@@ -34,6 +34,7 @@ echo.
   --hidden-import=spotipy ^
   --hidden-import=spotipy.oauth2 ^
   --hidden-import=winsdk.windows.media.control ^
+  --hidden-import=winsdk.windows.storage.streams ^
   --hidden-import=requests ^
   --hidden-import=dotenv ^
   --exclude-module=PyQt5 ^

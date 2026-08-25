@@ -13,6 +13,7 @@ class TrackInfo:
     progress_ms: int
     is_playing: bool
     cover_url: str | None = None
+    cover_data: bytes | None = None
 
 
 @dataclass(slots=True)
