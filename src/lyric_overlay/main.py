@@ -17,6 +17,11 @@ if __package__ in (None, ""):
     from lyric_overlay import __version__
     from lyric_overlay.app_controller import AppController
     from lyric_overlay.config import (
+        CARD_DEFAULT_PRESET,
+        CUSTOM_DISPLAY_PRESET,
+        DISPLAY_PRESETS,
+        FLOATING_CONTEXT_PRESET,
+        FLOATING_MINIMAL_PRESET,
         AppConfig,
         ICON_FILE,
         SPOTIFY_API_PLAYBACK_SOURCE,
@@ -25,6 +30,8 @@ if __package__ in (None, ""):
         ensure_env_file,
         load_config,
         save_config,
+        display_preset_for,
+        display_preset_values,
     )
     from lyric_overlay.lyrics import LyricsRepository
     from lyric_overlay.overlay import OverlayWindow, create_application
@@ -33,6 +40,11 @@ else:
     from . import __version__
     from .app_controller import AppController
     from .config import (
+        CARD_DEFAULT_PRESET,
+        CUSTOM_DISPLAY_PRESET,
+        DISPLAY_PRESETS,
+        FLOATING_CONTEXT_PRESET,
+        FLOATING_MINIMAL_PRESET,
         AppConfig,
         ICON_FILE,
         SPOTIFY_API_PLAYBACK_SOURCE,
@@ -41,6 +53,8 @@ else:
         ensure_env_file,
         load_config,
         save_config,
+        display_preset_for,
+        display_preset_values,
     )
     from .lyrics import LyricsRepository
     from .overlay import OverlayWindow, create_application
@@ -142,6 +156,9 @@ def main() -> int:
             lyric_font_family=updates.lyric_font_family or base_config.lyric_font_family,
             lyric_font_size=updates.lyric_font_size or base_config.lyric_font_size,
             text_alignment=updates.text_alignment or base_config.text_alignment,
+            display_style=updates.display_style,
+            lyric_lines=updates.lyric_lines,
+            track_info_mode=updates.track_info_mode,
             show_settings_button=updates.show_settings_button,
             show_hide_button=updates.show_hide_button,
             hover_buttons_enabled=updates.hover_buttons_enabled,
@@ -157,6 +174,7 @@ def main() -> int:
     autostart_action = None
     autostart_show_action = None
     autostart_hidden_action = None
+    display_preset_actions: dict[str, QAction] = {}
 
     def sync_mode_actions(playback_source: str) -> None:
         normalized = playback_source or WINDOWS_PLAYBACK_SOURCE
@@ -181,6 +199,11 @@ def main() -> int:
         if autostart_hidden_action is not None:
             autostart_hidden_action.setChecked(config.autostart_start_hidden)
 
+    def sync_display_preset_actions(config: AppConfig) -> None:
+        preset = display_preset_for(config)
+        for name, action in display_preset_actions.items():
+            action.setChecked(name == preset)
+
     tray_icon = None
     if QSystemTrayIcon.isSystemTrayAvailable():
         tray_icon = QSystemTrayIcon(app)
@@ -193,12 +216,27 @@ def main() -> int:
         hide_action = QAction("Hide Overlay", tray_menu)
         settings_action = QAction("Open Settings", tray_menu)
         mode_menu = QMenu("Mode", tray_menu)
-        overlay_buttons_menu = QMenu("Overlay Buttons", tray_menu)
+        overlay_buttons_menu = QMenu("Overlay Controls", tray_menu)
         startup_menu = QMenu("Startup", tray_menu)
+        display_preset_menu = QMenu("Display Preset", tray_menu)
         mode_group = QActionGroup(mode_menu)
         mode_group.setExclusive(True)
         startup_group = QActionGroup(startup_menu)
         startup_group.setExclusive(True)
+        display_preset_group = QActionGroup(display_preset_menu)
+        display_preset_group.setExclusive(True)
+        for preset, label in (
+            (CARD_DEFAULT_PRESET, "Card Default"),
+            (FLOATING_MINIMAL_PRESET, "Floating Minimal"),
+            (FLOATING_CONTEXT_PRESET, "Floating Context"),
+            (CUSTOM_DISPLAY_PRESET, "Custom"),
+        ):
+            action = QAction(label, display_preset_group)
+            action.setCheckable(True)
+            if preset == CUSTOM_DISPLAY_PRESET:
+                action.setEnabled(False)
+            display_preset_actions[preset] = action
+            display_preset_menu.addAction(action)
         mode_windows_action = QAction("Non-API", mode_group)
         mode_windows_action.setCheckable(True)
         mode_api_action = QAction("API", mode_group)
@@ -209,7 +247,7 @@ def main() -> int:
         show_settings_button_action.setCheckable(True)
         show_hide_button_action = QAction("Show Hide Button", overlay_buttons_menu)
         show_hide_button_action.setCheckable(True)
-        hover_buttons_action = QAction("Hover On", overlay_buttons_menu)
+        hover_buttons_action = QAction("Card Controls on Hover", overlay_buttons_menu)
         hover_buttons_action.setCheckable(True)
         overlay_buttons_menu.addAction(show_settings_button_action)
         overlay_buttons_menu.addAction(show_hide_button_action)
@@ -232,6 +270,7 @@ def main() -> int:
         tray_menu.addAction(hide_action)
         tray_menu.addAction(settings_action)
         tray_menu.addMenu(mode_menu)
+        tray_menu.addMenu(display_preset_menu)
         tray_menu.addMenu(overlay_buttons_menu)
         tray_menu.addMenu(startup_menu)
         tray_menu.addSeparator()
@@ -263,6 +302,24 @@ def main() -> int:
                 else "Mode changed to non-API playback"
             )
             reconnect_spotify()
+
+        def apply_display_preset(preset: str) -> None:
+            values = display_preset_values(preset)
+            if values is None:
+                return
+            base_config = load_config()
+            display_style, lyric_lines, track_info_mode = values
+            updated_config = replace(
+                base_config,
+                display_style=display_style,
+                lyric_lines=lyric_lines,
+                track_info_mode=track_info_mode,
+            )
+            save_config(updated_config)
+            controller.config = updated_config
+            overlay.load_config_values(updated_config)
+            overlay.apply_display_preset(preset)
+            sync_display_preset_actions(updated_config)
 
         def apply_overlay_button_visibility(
             *,
@@ -338,6 +395,12 @@ def main() -> int:
         mode_api_action.triggered.connect(
             lambda checked: apply_playback_source(SPOTIFY_API_PLAYBACK_SOURCE) if checked else None
         )
+        for preset, action in display_preset_actions.items():
+            if preset == CUSTOM_DISPLAY_PRESET:
+                continue
+            action.triggered.connect(
+                lambda checked, selected=preset: apply_display_preset(selected) if checked else None
+            )
         show_settings_button_action.triggered.connect(
             lambda checked: apply_overlay_button_visibility(show_settings_button=checked)
         )
@@ -365,6 +428,7 @@ def main() -> int:
         sync_mode_actions(config.playback_source)
         sync_overlay_button_actions(config)
         sync_startup_actions(config)
+        sync_display_preset_actions(config)
         tray_icon.show()
 
     controller = AppController(
@@ -390,6 +454,7 @@ def main() -> int:
         sync_mode_actions(saved_config.playback_source)
         sync_overlay_button_actions(saved_config)
         sync_startup_actions(saved_config)
+        sync_display_preset_actions(saved_config)
 
     def toggle_lyric_color(updated_config: AppConfig) -> None:
         saved_config = replace(
@@ -419,6 +484,7 @@ def main() -> int:
         sync_mode_actions(latest.playback_source)
         sync_overlay_button_actions(latest)
         sync_startup_actions(latest)
+        sync_display_preset_actions(latest)
         controller.lyrics_repository.set_lrclib_enabled(latest.lrclib_enabled)
         controller.lyrics_repository.set_auto_save_fetched_lrc(latest.auto_save_fetched_lrc)
         new_client, error_message = build_playback_client(latest)
