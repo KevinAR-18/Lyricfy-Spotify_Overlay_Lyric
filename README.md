@@ -144,6 +144,7 @@ TEXT_ALIGNMENT=left
 DISPLAY_STYLE=card
 LYRIC_LINES=single
 TRACK_INFO_MODE=track_change
+SHOW_ALBUM_COVER=false
 SHOW_SETTINGS_BUTTON=true
 SHOW_HIDE_BUTTON=true
 HOVER_BUTTONS_ENABLED=false
@@ -226,6 +227,7 @@ The built-in settings panel supports:
 - Text Color
 - Lyric Color
 - Lyric Glow Color
+- Optional album cover in Card mode
 - Auto-save fetched LRCLIB lyrics as local `.lrc` cache
 - Shortcut guide
 - Reset Default
@@ -242,6 +244,14 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 - Floating presets always show Settings and Hide controls on hover. `Card Controls on Hover` only changes the behavior of `Card Default`.
 - Changing the detailed display controls to a combination that does not match a built-in preset is shown as `Custom`.
 - Opening Settings always restores the full card temporarily so the controls remain readable.
+
+### Album Cover
+
+- Album artwork is optional and disabled by default.
+- Enable `Show album cover in Card mode` in Settings to place a 48px rounded cover beside the lyrics.
+- Spotify API mode uses the album image URL from Spotify; Non-API mode uses artwork exposed by the Windows media session when available.
+- If artwork is loading, missing, or invalid, Lyricfy automatically keeps the normal lyric-only layout without a placeholder or error.
+- Floating presets always remain text-only even when the album cover preference is enabled.
 
 `PLAYBACK_SOURCE` supports:
 
