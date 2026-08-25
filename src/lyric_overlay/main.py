@@ -159,6 +159,7 @@ def main() -> int:
             display_style=updates.display_style,
             lyric_lines=updates.lyric_lines,
             track_info_mode=updates.track_info_mode,
+            show_album_cover=updates.show_album_cover,
             show_settings_button=updates.show_settings_button,
             show_hide_button=updates.show_hide_button,
             hover_buttons_enabled=updates.hover_buttons_enabled,

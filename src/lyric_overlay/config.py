@@ -102,6 +102,7 @@ class AppConfig:
     display_style: str = CARD_DISPLAY_STYLE
     lyric_lines: str = SINGLE_LYRIC_LINES
     track_info_mode: str = TRACK_CHANGE_INFO_MODE
+    show_album_cover: bool = False
     show_settings_button: bool = True
     show_hide_button: bool = True
     hover_buttons_enabled: bool = False
@@ -131,6 +132,7 @@ def default_config() -> AppConfig:
         display_style=CARD_DISPLAY_STYLE,
         lyric_lines=SINGLE_LYRIC_LINES,
         track_info_mode=TRACK_CHANGE_INFO_MODE,
+        show_album_cover=False,
         show_settings_button=True,
         show_hide_button=True,
         hover_buttons_enabled=False,
@@ -175,6 +177,7 @@ def load_config() -> AppConfig:
         track_info_mode=_normalize_track_info_mode(
             os.getenv("TRACK_INFO_MODE", TRACK_CHANGE_INFO_MODE)
         ),
+        show_album_cover=os.getenv("SHOW_ALBUM_COVER", "false").lower() == "true",
         show_settings_button=os.getenv("SHOW_SETTINGS_BUTTON", "true").lower() == "true",
         show_hide_button=os.getenv("SHOW_HIDE_BUTTON", "true").lower() == "true",
         hover_buttons_enabled=os.getenv("HOVER_BUTTONS_ENABLED", "false").lower() == "true",
@@ -278,6 +281,7 @@ def save_config(config: AppConfig) -> None:
         f"DISPLAY_STYLE={_normalize_display_style(config.display_style)}",
         f"LYRIC_LINES={_normalize_lyric_lines(config.lyric_lines)}",
         f"TRACK_INFO_MODE={_normalize_track_info_mode(config.track_info_mode)}",
+        f"SHOW_ALBUM_COVER={'true' if config.show_album_cover else 'false'}",
         f"SHOW_SETTINGS_BUTTON={'true' if config.show_settings_button else 'false'}",
         f"SHOW_HIDE_BUTTON={'true' if config.show_hide_button else 'false'}",
         f"HOVER_BUTTONS_ENABLED={'true' if config.hover_buttons_enabled else 'false'}",
