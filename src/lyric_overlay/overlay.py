@@ -351,7 +351,10 @@ class OverlayWindow(QWidget):
         self.glow_color_input = self._create_input("Example: #66CCFFFF")
         self.toggle_color_input = self._create_input("Example: #1A1A1A")
         self.auto_save_lrc_checkbox = QCheckBox("Save fetched lyrics as local .lrc cache")
-        self.hover_buttons_checkbox = QCheckBox("Hover On: show Settings and Hide buttons on mouse hover")
+        self.hover_buttons_checkbox = QCheckBox("Card controls on hover")
+        self.hover_buttons_checkbox.setToolTip(
+            "Floating presets always show Settings and Hide controls on hover."
+        )
         self.autostart_checkbox = QCheckBox("Auto start when Windows starts")
         self.shortcuts_label = QLabel(shortcuts_guide_text())
         self.shortcuts_label.setObjectName("shortcutsGuide")
@@ -482,6 +485,7 @@ class OverlayWindow(QWidget):
         self.display_style_input.currentIndexChanged.connect(self._sync_custom_display_preset)
         self.lyric_lines_input.currentIndexChanged.connect(self._sync_custom_display_preset)
         self.track_info_mode_input.currentIndexChanged.connect(self._sync_custom_display_preset)
+        self.hover_buttons_checkbox.toggled.connect(self._preview_card_hover_controls)
 
         self._sync_playback_source_ui()
         self._apply_theme()
@@ -1229,6 +1233,12 @@ class OverlayWindow(QWidget):
         self._refresh_compact_text()
         self.update()
 
+    def _preview_card_hover_controls(self, enabled: bool) -> None:
+        self._hover_buttons_enabled = enabled
+        self._sync_overlay_buttons_ui()
+        self._apply_window_mode_if_needed()
+        self.update()
+
     def _set_startup_visibility_selection(self, start_hidden: bool) -> None:
         for index in range(self.startup_visibility_input.count()):
             if bool(self.startup_visibility_input.itemData(index)) == start_hidden:
@@ -1253,9 +1263,7 @@ class OverlayWindow(QWidget):
         self._content_grid.setColumnStretch(2, 1 if show_oauth_fields else 0)
 
     def _sync_overlay_buttons_ui(self) -> None:
-        if self._hover_buttons_enabled or (
-            self._display_style == FLOATING_DISPLAY_STYLE and not self._expanded
-        ):
+        if self._uses_hover_controls():
             visible_on_hover = self._mouse_over_overlay or self._expanded
             self.settings_button.setVisible(visible_on_hover)
             self.close_button.setVisible(visible_on_hover)
@@ -1263,6 +1271,11 @@ class OverlayWindow(QWidget):
 
         self.settings_button.setVisible(self._show_settings_button or self._expanded)
         self.close_button.setVisible(self._show_hide_button)
+
+    def _uses_hover_controls(self) -> bool:
+        return self._hover_buttons_enabled or (
+            self._display_style == FLOATING_DISPLAY_STYLE and not self._expanded
+        )
 
     def _refresh_layout_after_settings_change(self) -> None:
         if self._expanded:
@@ -1534,7 +1547,7 @@ class OverlayWindow(QWidget):
     def enterEvent(self, event) -> None:  # noqa: N802
         super().enterEvent(event)
         self._mouse_over_overlay = True
-        if self._hover_buttons_enabled:
+        if self._uses_hover_controls():
             self._sync_overlay_buttons_ui()
             self._apply_window_mode_if_needed()
         if self._display_style == FLOATING_DISPLAY_STYLE:
@@ -1543,7 +1556,7 @@ class OverlayWindow(QWidget):
     def leaveEvent(self, event) -> None:  # noqa: N802
         super().leaveEvent(event)
         self._mouse_over_overlay = False
-        if self._hover_buttons_enabled:
+        if self._uses_hover_controls():
             self._sync_overlay_buttons_ui()
             self._apply_window_mode_if_needed()
         if self._display_style == FLOATING_DISPLAY_STYLE:
