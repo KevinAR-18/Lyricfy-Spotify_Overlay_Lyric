@@ -55,6 +55,29 @@ WINDOWS_PLAYBACK_SOURCE = "windows"
 SPOTIFY_API_PLAYBACK_SOURCE = "spotify_api"
 PLAYBACK_SOURCES = {WINDOWS_PLAYBACK_SOURCE, SPOTIFY_API_PLAYBACK_SOURCE}
 TEXT_ALIGNMENTS = {"left", "center", "right"}
+CARD_DISPLAY_STYLE = "card"
+FLOATING_DISPLAY_STYLE = "floating"
+DISPLAY_STYLES = {CARD_DISPLAY_STYLE, FLOATING_DISPLAY_STYLE}
+SINGLE_LYRIC_LINES = "single"
+CURRENT_NEXT_LYRIC_LINES = "current_next"
+LYRIC_LINES_MODES = {SINGLE_LYRIC_LINES, CURRENT_NEXT_LYRIC_LINES}
+TRACK_CHANGE_INFO_MODE = "track_change"
+ALWAYS_TRACK_INFO_MODE = "always"
+NEVER_TRACK_INFO_MODE = "never"
+TRACK_INFO_MODES = {TRACK_CHANGE_INFO_MODE, ALWAYS_TRACK_INFO_MODE, NEVER_TRACK_INFO_MODE}
+CARD_DEFAULT_PRESET = "card_default"
+FLOATING_MINIMAL_PRESET = "floating_minimal"
+FLOATING_CONTEXT_PRESET = "floating_context"
+CUSTOM_DISPLAY_PRESET = "custom"
+DISPLAY_PRESETS = {
+    CARD_DEFAULT_PRESET: (CARD_DISPLAY_STYLE, SINGLE_LYRIC_LINES, TRACK_CHANGE_INFO_MODE),
+    FLOATING_MINIMAL_PRESET: (FLOATING_DISPLAY_STYLE, SINGLE_LYRIC_LINES, NEVER_TRACK_INFO_MODE),
+    FLOATING_CONTEXT_PRESET: (
+        FLOATING_DISPLAY_STYLE,
+        CURRENT_NEXT_LYRIC_LINES,
+        TRACK_CHANGE_INFO_MODE,
+    ),
+}
 
 
 @dataclass(slots=True)
@@ -76,6 +99,9 @@ class AppConfig:
     lyric_font_family: str = "Segoe UI"
     lyric_font_size: int = 11
     text_alignment: str = "left"
+    display_style: str = CARD_DISPLAY_STYLE
+    lyric_lines: str = SINGLE_LYRIC_LINES
+    track_info_mode: str = TRACK_CHANGE_INFO_MODE
     show_settings_button: bool = True
     show_hide_button: bool = True
     hover_buttons_enabled: bool = False
@@ -102,6 +128,9 @@ def default_config() -> AppConfig:
         lyric_font_family="Segoe UI",
         lyric_font_size=11,
         text_alignment="left",
+        display_style=CARD_DISPLAY_STYLE,
+        lyric_lines=SINGLE_LYRIC_LINES,
+        track_info_mode=TRACK_CHANGE_INFO_MODE,
         show_settings_button=True,
         show_hide_button=True,
         hover_buttons_enabled=False,
@@ -141,6 +170,11 @@ def load_config() -> AppConfig:
         lyric_font_family=os.getenv("LYRIC_FONT_FAMILY", "Segoe UI").strip() or "Segoe UI",
         lyric_font_size=int(os.getenv("LYRIC_FONT_SIZE", "11")),
         text_alignment=_normalize_text_alignment(os.getenv("TEXT_ALIGNMENT", "left")),
+        display_style=_normalize_display_style(os.getenv("DISPLAY_STYLE", CARD_DISPLAY_STYLE)),
+        lyric_lines=_normalize_lyric_lines(os.getenv("LYRIC_LINES", SINGLE_LYRIC_LINES)),
+        track_info_mode=_normalize_track_info_mode(
+            os.getenv("TRACK_INFO_MODE", TRACK_CHANGE_INFO_MODE)
+        ),
         show_settings_button=os.getenv("SHOW_SETTINGS_BUTTON", "true").lower() == "true",
         show_hide_button=os.getenv("SHOW_HIDE_BUTTON", "true").lower() == "true",
         hover_buttons_enabled=os.getenv("HOVER_BUTTONS_ENABLED", "false").lower() == "true",
@@ -185,6 +219,43 @@ def _normalize_text_alignment(value: str) -> str:
     return "left"
 
 
+def _normalize_display_style(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in DISPLAY_STYLES:
+        return normalized
+    return CARD_DISPLAY_STYLE
+
+
+def _normalize_lyric_lines(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in LYRIC_LINES_MODES:
+        return normalized
+    return SINGLE_LYRIC_LINES
+
+
+def _normalize_track_info_mode(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in TRACK_INFO_MODES:
+        return normalized
+    return TRACK_CHANGE_INFO_MODE
+
+
+def display_preset_for(config: AppConfig) -> str:
+    values = (
+        _normalize_display_style(config.display_style),
+        _normalize_lyric_lines(config.lyric_lines),
+        _normalize_track_info_mode(config.track_info_mode),
+    )
+    for preset, preset_values in DISPLAY_PRESETS.items():
+        if values == preset_values:
+            return preset
+    return CUSTOM_DISPLAY_PRESET
+
+
+def display_preset_values(preset: str) -> tuple[str, str, str] | None:
+    return DISPLAY_PRESETS.get((preset or "").strip().lower())
+
+
 def save_config(config: AppConfig) -> None:
     # Simpan ulang seluruh konfigurasi ke format .env sederhana key=value.
     lines = [
@@ -204,6 +275,9 @@ def save_config(config: AppConfig) -> None:
         f"LYRIC_FONT_FAMILY={config.lyric_font_family}",
         f"LYRIC_FONT_SIZE={config.lyric_font_size}",
         f"TEXT_ALIGNMENT={_normalize_text_alignment(config.text_alignment)}",
+        f"DISPLAY_STYLE={_normalize_display_style(config.display_style)}",
+        f"LYRIC_LINES={_normalize_lyric_lines(config.lyric_lines)}",
+        f"TRACK_INFO_MODE={_normalize_track_info_mode(config.track_info_mode)}",
         f"SHOW_SETTINGS_BUTTON={'true' if config.show_settings_button else 'false'}",
         f"SHOW_HIDE_BUTTON={'true' if config.show_hide_button else 'false'}",
         f"HOVER_BUTTONS_ENABLED={'true' if config.hover_buttons_enabled else 'false'}",
