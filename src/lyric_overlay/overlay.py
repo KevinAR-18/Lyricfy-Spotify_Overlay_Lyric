@@ -24,7 +24,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE, WINDOWS_PLAYBACK_SOURCE, default_config
+from .config import (
+    ALWAYS_TRACK_INFO_MODE,
+    CARD_DISPLAY_STYLE,
+    CURRENT_NEXT_LYRIC_LINES,
+    CUSTOM_DISPLAY_PRESET,
+    FLOATING_DISPLAY_STYLE,
+    NEVER_TRACK_INFO_MODE,
+    SINGLE_LYRIC_LINES,
+    SPOTIFY_API_PLAYBACK_SOURCE,
+    TRACK_CHANGE_INFO_MODE,
+    AppConfig,
+    WINDOWS_PLAYBACK_SOURCE,
+    default_config,
+    display_preset_for,
+    display_preset_values,
+)
 from .models import TrackInfo
 
 
@@ -199,6 +214,7 @@ class OverlayWindow(QWidget):
         self._track_text = "Spotify is not playing"
         self._artist_text = ""
         self._current_line_text = ""
+        self._next_line_text = ""
         self._status_text = ""
         self._lyrics_available = False
         self._header_visible_until = 0.0
@@ -212,6 +228,9 @@ class OverlayWindow(QWidget):
         self._lyric_font_family = "Segoe UI"
         self._lyric_font_size = 11
         self._text_alignment = "left"
+        self._display_style = CARD_DISPLAY_STYLE
+        self._lyric_lines = SINGLE_LYRIC_LINES
+        self._track_info_mode = TRACK_CHANGE_INFO_MODE
         self._playback_source = WINDOWS_PLAYBACK_SOURCE
         self._show_settings_button = True
         self._show_hide_button = True
@@ -304,6 +323,21 @@ class OverlayWindow(QWidget):
         self.text_alignment_input.addItem("Left", "left")
         self.text_alignment_input.addItem("Center", "center")
         self.text_alignment_input.addItem("Right", "right")
+        self.display_preset_input = QComboBox()
+        self.display_preset_input.addItem("Card Default", "card_default")
+        self.display_preset_input.addItem("Floating Minimal", "floating_minimal")
+        self.display_preset_input.addItem("Floating Context", "floating_context")
+        self.display_preset_input.addItem("Custom", CUSTOM_DISPLAY_PRESET)
+        self.display_style_input = QComboBox()
+        self.display_style_input.addItem("Card", CARD_DISPLAY_STYLE)
+        self.display_style_input.addItem("Floating Text", FLOATING_DISPLAY_STYLE)
+        self.lyric_lines_input = QComboBox()
+        self.lyric_lines_input.addItem("Single Line", SINGLE_LYRIC_LINES)
+        self.lyric_lines_input.addItem("Current + Next", CURRENT_NEXT_LYRIC_LINES)
+        self.track_info_mode_input = QComboBox()
+        self.track_info_mode_input.addItem("On Track Change", TRACK_CHANGE_INFO_MODE)
+        self.track_info_mode_input.addItem("Always", ALWAYS_TRACK_INFO_MODE)
+        self.track_info_mode_input.addItem("Never", NEVER_TRACK_INFO_MODE)
         self.startup_visibility_input = QComboBox()
         self.startup_visibility_input.addItem("Show Overlay", False)
         self.startup_visibility_input.addItem("Start Hidden", True)
@@ -325,6 +359,10 @@ class OverlayWindow(QWidget):
 
         for combo_box in (
             self.text_alignment_input,
+            self.display_preset_input,
+            self.display_style_input,
+            self.lyric_lines_input,
+            self.track_info_mode_input,
             self.startup_visibility_input,
             self.font_family_input,
         ):
@@ -383,6 +421,11 @@ class OverlayWindow(QWidget):
         right_column = QVBoxLayout()
         right_column.setContentsMargins(0, 0, 0, 0)
         right_column.setSpacing(8)
+        right_column.addWidget(self._create_section_title("Display"))
+        right_column.addWidget(self._create_field("Display Preset", self.display_preset_input))
+        right_column.addWidget(self._create_field("Display Style", self.display_style_input))
+        right_column.addWidget(self._create_field("Lyric Lines", self.lyric_lines_input))
+        right_column.addWidget(self._create_field("Track Information", self.track_info_mode_input))
         right_column.addWidget(self._create_section_title("Appearance"))
         right_column.addWidget(self._create_field("Overlay Color", self.overlay_color_input))
         right_column.addWidget(self._create_field("Text Color", self.text_color_input))
@@ -421,6 +464,11 @@ class OverlayWindow(QWidget):
         self.settings_panel.hide()
 
         card_layout.addLayout(header_layout)
+        self.next_line_label = QLabel("")
+        self.next_line_label.setObjectName("nextLyric")
+        self.next_line_label.setWordWrap(True)
+        self.next_line_label.hide()
+        card_layout.addWidget(self.next_line_label)
         card_layout.addWidget(self.track_title_label)
         card_layout.addWidget(self.status_label)
         card_layout.addWidget(self.settings_panel)
@@ -430,11 +478,20 @@ class OverlayWindow(QWidget):
         self._lyric_glow.setOffset(0, 0)
         self.compact_label.setGraphicsEffect(self._lyric_glow)
 
+        self.display_preset_input.currentIndexChanged.connect(self._apply_selected_display_preset)
+        self.display_style_input.currentIndexChanged.connect(self._sync_custom_display_preset)
+        self.lyric_lines_input.currentIndexChanged.connect(self._sync_custom_display_preset)
+        self.track_info_mode_input.currentIndexChanged.connect(self._sync_custom_display_preset)
+
         self._sync_playback_source_ui()
         self._apply_theme()
         self._refresh_compact_text()
 
     def _apply_theme(self) -> None:
+        next_lyric_color = QColor(self._overlay_text_color)
+        if not next_lyric_color.isValid():
+            next_lyric_color = QColor("#F4F4F4")
+        next_lyric_color.setAlpha(153)
         self.setStyleSheet(
             f"""
             QWidget#card {{
@@ -450,6 +507,9 @@ class OverlayWindow(QWidget):
             }}
             QLabel#trackMeta {{
                 color: {self._lyric_text_color};
+            }}
+            QLabel#nextLyric {{
+                color: {next_lyric_color.name(QColor.NameFormat.HexArgb)};
             }}
             QLabel#sectionTitle {{
                 color: {self._overlay_text_color};
@@ -607,9 +667,16 @@ class OverlayWindow(QWidget):
         self._lyric_font_family = config.lyric_font_family or "Segoe UI"
         self._lyric_font_size = max(8, config.lyric_font_size or 11)
         self._text_alignment = config.text_alignment or "left"
+        self._display_style = config.display_style or CARD_DISPLAY_STYLE
+        self._lyric_lines = config.lyric_lines or SINGLE_LYRIC_LINES
+        self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
         self.font_family_input.setCurrentFont(QFont(self._lyric_font_family))
         self.font_size_input.setValue(self._lyric_font_size)
         self._set_alignment_selection(self._text_alignment)
+        self._set_combo_data(self.display_style_input, self._display_style)
+        self._set_combo_data(self.lyric_lines_input, self._lyric_lines)
+        self._set_combo_data(self.track_info_mode_input, self._track_info_mode)
+        self._set_combo_data(self.display_preset_input, display_preset_for(config))
         self.overlay_color_input.setText(config.overlay_bg_color)
         self.text_color_input.setText(config.overlay_text_color)
         self.lyric_color_input.setText(config.lyric_text_color)
@@ -629,6 +696,7 @@ class OverlayWindow(QWidget):
         self._set_startup_visibility_selection(config.autostart_start_hidden)
         self._sync_playback_source_ui()
         self._sync_overlay_buttons_ui()
+        self._refresh_compact_text()
         self.apply_config_theme(config)
         self._refresh_layout_after_settings_change()
 
@@ -655,6 +723,9 @@ class OverlayWindow(QWidget):
             lyric_font_family=self.font_family_input.currentFont().family().strip() or "Segoe UI",
             lyric_font_size=self.font_size_input.value(),
             text_alignment=self.text_alignment_input.currentData(),
+            display_style=self.display_style_input.currentData(),
+            lyric_lines=self.lyric_lines_input.currentData(),
+            track_info_mode=self.track_info_mode_input.currentData(),
             show_settings_button=self._show_settings_button,
             show_hide_button=self._show_hide_button,
             hover_buttons_enabled=self.hover_buttons_checkbox.isChecked(),
@@ -671,12 +742,31 @@ class OverlayWindow(QWidget):
         self._lyric_font_family = config.lyric_font_family or "Segoe UI"
         self._lyric_font_size = max(8, config.lyric_font_size or 11)
         self._text_alignment = config.text_alignment or "left"
+        self._display_style = config.display_style or CARD_DISPLAY_STYLE
+        self._lyric_lines = config.lyric_lines or SINGLE_LYRIC_LINES
+        self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
         self._apply_theme()
 
     def set_playback_source(self, playback_source: str) -> None:
         self._playback_source = playback_source or WINDOWS_PLAYBACK_SOURCE
         self._sync_playback_source_ui()
         self._refresh_layout_after_settings_change()
+
+    def apply_display_preset(self, preset: str) -> None:
+        values = display_preset_values(preset)
+        if values is None:
+            return
+        self._display_style, self._lyric_lines, self._track_info_mode = values
+        self._set_combo_data(self.display_style_input, self._display_style)
+        self._set_combo_data(self.lyric_lines_input, self._lyric_lines)
+        self._set_combo_data(self.track_info_mode_input, self._track_info_mode)
+        self._set_combo_data(self.display_preset_input, preset)
+        self._sync_overlay_buttons_ui()
+        self._refresh_compact_text()
+        self._last_window_size = None
+        self._apply_window_mode()
+        self.update()
+        self.update()
 
     def playback_source(self) -> str:
         return self._playback_source
@@ -920,6 +1010,7 @@ class OverlayWindow(QWidget):
             self._track_text = "Spotify is not playing"
             self._artist_text = "Waiting for playback"
             self._current_line_text = ""
+            self._next_line_text = ""
             self._lyrics_available = False
             self._header_visible_until = 0.0
             self._no_lyrics_notice_until = 0.0
@@ -941,6 +1032,7 @@ class OverlayWindow(QWidget):
             or not self._lyrics_available
         ):
             self._current_line_text = ""
+            self._next_line_text = ""
         if self._lyrics_available and (
             self._track_text != previous_title or self._artist_text != previous_artist
         ):
@@ -960,8 +1052,8 @@ class OverlayWindow(QWidget):
         previous_compact_text = self.compact_label.text()
         previous_header_visible = self.track_title_label.isVisible()
         previous_header_text = self.track_title_label.text()
-        del next_line
         self._current_line_text = current_line.strip()
+        self._next_line_text = next_line.strip()
         self._refresh_compact_text()
         if (
             self.compact_label.text() != previous_compact_text
@@ -994,7 +1086,12 @@ class OverlayWindow(QWidget):
 
         if self._lyrics_available:
             header_text = f"{title_text} - {artist_text}" if title_text and artist_text else title_text or artist_text
-            show_small_track = bool(header_text) and time.monotonic() < self._header_visible_until
+            if self._track_info_mode == ALWAYS_TRACK_INFO_MODE:
+                show_small_track = bool(header_text)
+            elif self._track_info_mode == NEVER_TRACK_INFO_MODE:
+                show_small_track = False
+            else:
+                show_small_track = bool(header_text) and time.monotonic() < self._header_visible_until
         else:
             header_text = artist_text
             show_small_track = bool(header_text)
@@ -1004,6 +1101,16 @@ class OverlayWindow(QWidget):
         )
         self.track_title_label.setVisible(show_small_track)
         self.compact_label.setText(self._format_compact_text(compact_text, available_width=compact_width))
+        show_next = (
+            self._lyrics_available
+            and self._lyric_lines == CURRENT_NEXT_LYRIC_LINES
+            and bool(self._current_line_text)
+            and bool(self._next_line_text)
+        )
+        self.next_line_label.setText(
+            self._format_next_line_text(self._next_line_text, available_width=compact_width)
+        )
+        self.next_line_label.setVisible(show_next)
         self._schedule_transient_refresh()
 
     def _apply_text_preferences(self) -> None:
@@ -1017,11 +1124,15 @@ class OverlayWindow(QWidget):
         meta_font = QFont(self._lyric_font_family, max(8, self._lyric_font_size - 3))
         self.track_title_label.setFont(meta_font)
         self.status_label.setFont(meta_font)
+        next_font = QFont(self._lyric_font_family, max(8, self._lyric_font_size - 2))
+        next_font.setBold(False)
+        self.next_line_label.setFont(next_font)
 
         alignment = self._qt_alignment(self._text_alignment)
         self.compact_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
         self.track_title_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
         self.status_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
+        self.next_line_label.setAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
         self._refresh_compact_text()
 
     def _elide_label_text(
@@ -1075,12 +1186,48 @@ class OverlayWindow(QWidget):
         second_line = metrics.elidedText(remaining, Qt.TextElideMode.ElideRight, available_width)
         return f"{first_line}\n{second_line}"
 
+    def _format_next_line_text(self, text: str, *, available_width: int | None = None) -> str:
+        normalized = " ".join(text.split())
+        if not normalized:
+            return ""
+        if available_width is None:
+            available_width = self.next_line_label.width() or self.compact_label.minimumWidth()
+        metrics = QFontMetrics(self.next_line_label.font())
+        return metrics.elidedText(normalized, Qt.TextElideMode.ElideRight, max(180, available_width))
+
     def _set_alignment_selection(self, alignment: str) -> None:
         for index in range(self.text_alignment_input.count()):
             if self.text_alignment_input.itemData(index) == alignment:
                 self.text_alignment_input.setCurrentIndex(index)
                 return
         self.text_alignment_input.setCurrentIndex(0)
+
+    @staticmethod
+    def _set_combo_data(combo: QComboBox, value) -> None:
+        for index in range(combo.count()):
+            if combo.itemData(index) == value:
+                combo.setCurrentIndex(index)
+                return
+
+    def _apply_selected_display_preset(self) -> None:
+        preset = self.display_preset_input.currentData()
+        values = display_preset_values(preset)
+        if values is None:
+            return
+        style, lyric_lines, track_info_mode = values
+        self._set_combo_data(self.display_style_input, style)
+        self._set_combo_data(self.lyric_lines_input, lyric_lines)
+        self._set_combo_data(self.track_info_mode_input, track_info_mode)
+
+    def _sync_custom_display_preset(self) -> None:
+        config = self.current_form_config()
+        self._set_combo_data(self.display_preset_input, display_preset_for(config))
+        self._display_style = config.display_style
+        self._lyric_lines = config.lyric_lines
+        self._track_info_mode = config.track_info_mode
+        self._sync_overlay_buttons_ui()
+        self._refresh_compact_text()
+        self.update()
 
     def _set_startup_visibility_selection(self, start_hidden: bool) -> None:
         for index in range(self.startup_visibility_input.count()):
@@ -1106,7 +1253,9 @@ class OverlayWindow(QWidget):
         self._content_grid.setColumnStretch(2, 1 if show_oauth_fields else 0)
 
     def _sync_overlay_buttons_ui(self) -> None:
-        if self._hover_buttons_enabled:
+        if self._hover_buttons_enabled or (
+            self._display_style == FLOATING_DISPLAY_STYLE and not self._expanded
+        ):
             visible_on_hover = self._mouse_over_overlay or self._expanded
             self.settings_button.setVisible(visible_on_hover)
             self.close_button.setVisible(visible_on_hover)
@@ -1277,6 +1426,8 @@ class OverlayWindow(QWidget):
             visible_extra_heights.append(self.track_title_label.sizeHint().height())
         if self.status_label.isVisible():
             visible_extra_heights.append(self.status_label.sizeHint().height())
+        if self.next_line_label.isVisible():
+            visible_extra_heights.append(self.next_line_label.sizeHint().height())
 
         if visible_extra_heights:
             total += spacing * len(visible_extra_heights) + sum(visible_extra_heights)
@@ -1386,6 +1537,8 @@ class OverlayWindow(QWidget):
         if self._hover_buttons_enabled:
             self._sync_overlay_buttons_ui()
             self._apply_window_mode_if_needed()
+        if self._display_style == FLOATING_DISPLAY_STYLE:
+            self.update()
 
     def leaveEvent(self, event) -> None:  # noqa: N802
         super().leaveEvent(event)
@@ -1393,13 +1546,24 @@ class OverlayWindow(QWidget):
         if self._hover_buttons_enabled:
             self._sync_overlay_buttons_ui()
             self._apply_window_mode_if_needed()
+        if self._display_style == FLOATING_DISPLAY_STYLE:
+            self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
         del event
+        if (
+            self._display_style == FLOATING_DISPLAY_STYLE
+            and not self._expanded
+            and not self._mouse_over_overlay
+        ):
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(QPen(QColor(255, 255, 255, 18), 1))
-        painter.setBrush(self._overlay_background_qcolor())
+        background = self._overlay_background_qcolor()
+        if self._display_style == FLOATING_DISPLAY_STYLE and not self._expanded:
+            background.setAlpha(min(background.alpha(), 72))
+        painter.setBrush(background)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         radius = min(self._OVERLAY_CORNER_RADIUS, max(1.0, rect.height() / 2))
         painter.drawRoundedRect(rect, radius, radius)
