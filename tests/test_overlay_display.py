@@ -7,7 +7,7 @@ from lyric_overlay.config import (
     default_config,
 )
 from lyric_overlay.overlay import OverlayWindow, create_application
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice
+from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
 from PySide6.QtGui import QColor, QImage
 
 
@@ -202,6 +202,22 @@ def test_corner_radius_preview_updates_state():
     assert overlay._overlay_corner_radius == 12
     overlay.overlay_corner_radius_input.setValue(0)
     assert overlay._overlay_corner_radius == 0
+
+
+def test_cover_is_centered_when_lyrics_are_unavailable():
+    overlay = _overlay()
+    overlay._current_line_text = ""
+    overlay._sync_album_cover_alignment()
+    alignment = overlay._compact_row.itemAt(0).alignment()
+    assert alignment & Qt.AlignmentFlag.AlignVCenter
+
+
+def test_cover_is_top_aligned_when_current_lyric_is_visible():
+    overlay = _overlay()
+    overlay._current_line_text = "Current lyric"
+    overlay._sync_album_cover_alignment()
+    alignment = overlay._compact_row.itemAt(0).alignment()
+    assert alignment & Qt.AlignmentFlag.AlignTop
 
 
 def test_invalid_or_missing_cover_collapses_layout():
