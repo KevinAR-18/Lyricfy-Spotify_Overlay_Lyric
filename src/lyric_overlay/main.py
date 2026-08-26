@@ -218,6 +218,8 @@ def main() -> int:
         show_action = QAction("Show Overlay", tray_menu)
         hide_action = QAction("Hide Overlay", tray_menu)
         settings_action = QAction("Open Settings", tray_menu)
+        snap_home_action = QAction("Snap Overlay Home", tray_menu)
+        snap_home_action.setShortcut("Ctrl+H")
         mode_menu = QMenu("Mode", tray_menu)
         overlay_buttons_menu = QMenu("Overlay Controls", tray_menu)
         startup_menu = QMenu("Startup", tray_menu)
@@ -272,6 +274,7 @@ def main() -> int:
         tray_menu.addAction(show_action)
         tray_menu.addAction(hide_action)
         tray_menu.addAction(settings_action)
+        tray_menu.addAction(snap_home_action)
         tray_menu.addMenu(mode_menu)
         tray_menu.addMenu(display_preset_menu)
         tray_menu.addMenu(overlay_buttons_menu)
@@ -392,6 +395,7 @@ def main() -> int:
         show_action.triggered.connect(show_overlay)
         hide_action.triggered.connect(hide_overlay)
         settings_action.triggered.connect(open_settings)
+        snap_home_action.triggered.connect(overlay.snap_to_home)
         mode_windows_action.triggered.connect(
             lambda checked: apply_playback_source(WINDOWS_PLAYBACK_SOURCE) if checked else None
         )
