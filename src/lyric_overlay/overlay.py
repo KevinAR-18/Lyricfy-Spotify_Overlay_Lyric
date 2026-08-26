@@ -437,6 +437,13 @@ class OverlayWindow(QWidget):
         left_column.addWidget(self.hover_buttons_checkbox)
         left_column.addWidget(self.autostart_checkbox)
         left_column.addWidget(self._create_field("Auto Start Mode", self.startup_visibility_input))
+        left_column.addWidget(self._create_section_title("Overlay"))
+        left_column.addWidget(
+            self._create_field("Floating Cover", self.floating_cover_mode_input)
+        )
+        left_column.addWidget(
+            self._create_field("Overlay Corner Radius", self.overlay_corner_radius_input)
+        )
         left_column.addWidget(self._create_section_title("Shortcuts"))
         left_column.addWidget(self.shortcuts_label)
         left_column.addStretch(1)
@@ -456,12 +463,6 @@ class OverlayWindow(QWidget):
         right_column.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
         right_column.addWidget(self._create_field("Toggle Lyric Color", self.toggle_color_input))
         right_column.addWidget(self.show_album_cover_checkbox)
-        right_column.addWidget(
-            self._create_field("Floating Cover", self.floating_cover_mode_input)
-        )
-        right_column.addWidget(
-            self._create_field("Overlay Corner Radius", self.overlay_corner_radius_input)
-        )
         right_column.addStretch(1)
 
         credentials_layout = QVBoxLayout()
