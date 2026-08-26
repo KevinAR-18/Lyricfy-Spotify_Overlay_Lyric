@@ -12,10 +12,17 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Batch-downloads `.lrc` files for Spotify liked songs and playlists with read-only API access
 - Retries lyric lookup automatically when a new track does not resolve on the first attempt
 - Compact frameless overlay that stays on top
+- Three display presets: `Card Default`, `Floating Minimal`, and `Floating Context`
+- Optional smaller next lyric below the active lyric
+- Optional album artwork in Card and Floating modes, with automatic lyric-only fallback
+- Floating artwork can stay visible or appear only when the overlay is hovered
+- Custom overlay corner radius from 0 to 40px
+- Track information visibility options: on track change, always, or never
+- Hover controls that respect individual Settings and Hide button preferences
 - Draggable overlay with snap-back behavior near the last saved position
 - System tray controls for show, hide, settings, and exit
 - System tray playback mode switch between `Non-API` and `API`
-- In-app settings for Spotify credentials, redirect URI, lyric offset, alignment, font, and colors
+- In-app settings for display presets, artwork, Spotify credentials, lyric offset, alignment, font, and colors
 - Windows local playback mode by default on startup, without Spotify Developer credentials
 - Auto-created `.env` file on first launch
 - Separate Spotify token cache for packaged builds
@@ -229,7 +236,7 @@ The built-in settings panel supports:
 - Text Color
 - Lyric Color
 - Lyric Glow Color
-- Optional album cover in Card mode
+- Optional album cover in Card and Floating modes
 - Floating cover visibility (`Always Visible` or `On Hover`)
 - Overlay corner radius (`0` to `40` px)
 - Auto-save fetched LRCLIB lyrics as local `.lrc` cache
@@ -256,12 +263,16 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 - Spotify API mode uses the album image URL from Spotify; Non-API mode uses artwork exposed by the Windows media session when available.
 - If artwork is loading, missing, or invalid, Lyricfy automatically keeps the normal lyric-only layout without a placeholder or error.
 - Floating presets can keep artwork `Always Visible` or show it only `On Hover`.
+- When lyrics are unavailable, the artwork is vertically centered beside the song title and artist.
+- Artwork keeps its compact rounded corners and disappears without leaving a gap when unavailable.
 
 ### Overlay Corner Radius
 
 - `Overlay Corner Radius` controls the rounded corners of the Card background, Settings background, and subtle Floating hover background.
 - The supported range is `0` to `40` pixels. `0` produces square corners and the default remains `30` pixels.
 - Album artwork keeps its own fixed 8px corner radius.
+
+`Floating Cover` and `Overlay Corner Radius` are grouped under the left-side `Overlay` section so the Settings columns remain balanced.
 
 `PLAYBACK_SOURCE` supports:
 
