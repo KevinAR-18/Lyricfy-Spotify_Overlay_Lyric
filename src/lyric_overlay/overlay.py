@@ -202,14 +202,16 @@ class OverlayWindow(QWidget):
     _EXPANDED_WINDOW_WIDTH = 740
     _API_COLUMN_EXTRA_WIDTH = 260
     _ALBUM_COVER_SIZE = 48
+    _DRAG_START_DISTANCE = 3
 
     def __init__(self) -> None:
         super().__init__()
-        self._drag_origin = None
+        self._drag_press_global: QPoint | None = None
+        self._drag_start_window_pos: QPoint | None = None
+        self._dragging = False
         self._initial_positioned = False
         self._expanded = False
         self._snap_pos = None
-        self._snap_threshold = 28
         self._user_positioned = False
         self._allow_exit = False
         self._hide_requested = False
@@ -1721,26 +1723,55 @@ class OverlayWindow(QWidget):
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self.setFocus(Qt.FocusReason.MouseFocusReason)
-            self._drag_origin = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self._prepare_drag(event.globalPosition().toPoint())
             event.accept()
+            return
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        if self._drag_origin is not None and event.buttons() & Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self._drag_origin)
+        if self._drag_press_global is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self._continue_drag(event.globalPosition().toPoint())
             event.accept()
+            return
+        super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
-        if self._snap_pos is not None:
-            current_pos = self.pos()
-            dx = abs(current_pos.x() - self._snap_pos.x())
-            dy = abs(current_pos.y() - self._snap_pos.y())
-            if dx <= self._snap_threshold and dy <= self._snap_threshold:
-                self.move(self._snap_pos)
-            else:
-                self._snap_pos = current_pos
-                self._user_positioned = True
-        self._drag_origin = None
-        event.accept()
+        if event.button() == Qt.MouseButton.LeftButton and self._drag_press_global is not None:
+            self._finish_drag()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _prepare_drag(self, global_pos: QPoint) -> None:
+        self._drag_press_global = QPoint(global_pos)
+        self._drag_start_window_pos = self.pos()
+        self._dragging = False
+
+    def _continue_drag(self, global_pos: QPoint) -> bool:
+        if self._drag_press_global is None or self._drag_start_window_pos is None:
+            return False
+
+        delta = global_pos - self._drag_press_global
+        if not self._dragging:
+            distance = max(abs(delta.x()), abs(delta.y()))
+            if distance < self._DRAG_START_DISTANCE:
+                return False
+            self._dragging = True
+
+        self.move(self._drag_start_window_pos + delta)
+        return True
+
+    def _finish_drag(self) -> bool:
+        was_dragging = self._dragging
+        if was_dragging:
+            self._snap_pos = self.pos()
+            self._user_positioned = True
+
+        self._drag_press_global = None
+        self._drag_start_window_pos = None
+        self._dragging = False
+
+        return was_dragging
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_R and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
