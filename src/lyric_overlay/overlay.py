@@ -204,6 +204,7 @@ class OverlayWindow(QWidget):
     _API_COLUMN_EXTRA_WIDTH = 260
     _ALBUM_COVER_SIZE = 48
     _DRAG_START_DISTANCE = 3
+    _MIN_VISIBLE_DRAG_WIDTH = 40
 
     def __init__(self) -> None:
         super().__init__()
@@ -1615,20 +1616,38 @@ class OverlayWindow(QWidget):
             self._layout_refresh_pending = True
             return
         if self._user_positioned and self._snap_pos is not None:
-            self._snap_pos = self._clamped_horizontal_pos(self._snap_pos)
+            if self._expanded:
+                self._snap_pos = self._clamped_settings_horizontal_pos(self._snap_pos)
+            else:
+                self._snap_pos = self._clamped_compact_horizontal_pos(self._snap_pos)
             self.move(self._snap_pos)
             return
         self._position_top_center()
 
-    def _clamped_horizontal_pos(self, pos: QPoint) -> QPoint:
-        # Hanya sumbu X yang dibatasi agar overlay tetap boleh menimpa taskbar.
+    def _horizontal_screen_geometry(self, pos: QPoint) -> QRect | None:
         screen = QApplication.screenAt(pos) or self.screen() or QApplication.primaryScreen()
         if screen is None:
-            return pos
+            return None
+        return screen.availableGeometry()
 
-        available = screen.availableGeometry()
+    def _clamped_settings_horizontal_pos(self, pos: QPoint) -> QPoint:
+        available = self._horizontal_screen_geometry(pos)
+        if available is None:
+            return pos
         max_x = available.right() - self.width() + 1
         clamped_x = min(max(pos.x(), available.left()), max(available.left(), max_x))
+        if clamped_x == pos.x():
+            return pos
+        return QPoint(clamped_x, pos.y())
+
+    def _clamped_compact_horizontal_pos(self, pos: QPoint) -> QPoint:
+        available = self._horizontal_screen_geometry(pos)
+        if available is None:
+            return pos
+        visible_width = min(self._MIN_VISIBLE_DRAG_WIDTH, self.width())
+        min_x = available.left() - self.width() + visible_width
+        max_x = available.right() - visible_width + 1
+        clamped_x = min(max(pos.x(), min_x), max_x)
         if clamped_x == pos.x():
             return pos
         return QPoint(clamped_x, pos.y())
