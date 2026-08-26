@@ -26,10 +26,12 @@ from PySide6.QtWidgets import (
 
 from .config import (
     ALWAYS_TRACK_INFO_MODE,
+    ALWAYS_FLOATING_COVER_MODE,
     CARD_DISPLAY_STYLE,
     CURRENT_NEXT_LYRIC_LINES,
     CUSTOM_DISPLAY_PRESET,
     FLOATING_DISPLAY_STYLE,
+    HOVER_FLOATING_COVER_MODE,
     NEVER_TRACK_INFO_MODE,
     SINGLE_LYRIC_LINES,
     SPOTIFY_API_PLAYBACK_SOURCE,
@@ -233,6 +235,7 @@ class OverlayWindow(QWidget):
         self._lyric_lines = SINGLE_LYRIC_LINES
         self._track_info_mode = TRACK_CHANGE_INFO_MODE
         self._show_album_cover = False
+        self._floating_cover_mode = ALWAYS_FLOATING_COVER_MODE
         self._album_cover_source: QPixmap | None = None
         self._playback_source = WINDOWS_PLAYBACK_SOURCE
         self._show_settings_button = True
@@ -354,10 +357,13 @@ class OverlayWindow(QWidget):
         self.glow_color_input = self._create_input("Example: #66CCFFFF")
         self.toggle_color_input = self._create_input("Example: #1A1A1A")
         self.auto_save_lrc_checkbox = QCheckBox("Save fetched lyrics as local .lrc cache")
-        self.show_album_cover_checkbox = QCheckBox("Show album cover in Card mode")
+        self.show_album_cover_checkbox = QCheckBox("Show album cover")
         self.show_album_cover_checkbox.setToolTip(
-            "Artwork is shown in Card mode when available. Floating presets remain text-only."
+            "Show artwork when available. Floating visibility can be configured below."
         )
+        self.floating_cover_mode_input = QComboBox()
+        self.floating_cover_mode_input.addItem("Always Visible", ALWAYS_FLOATING_COVER_MODE)
+        self.floating_cover_mode_input.addItem("On Hover", HOVER_FLOATING_COVER_MODE)
         self.hover_buttons_checkbox = QCheckBox("Card controls on hover")
         self.hover_buttons_checkbox.setToolTip(
             "Floating presets always show Settings and Hide controls on hover."
@@ -443,6 +449,9 @@ class OverlayWindow(QWidget):
         right_column.addWidget(self._create_field("Lyric Glow Color", self.glow_color_input))
         right_column.addWidget(self._create_field("Toggle Lyric Color", self.toggle_color_input))
         right_column.addWidget(self.show_album_cover_checkbox)
+        right_column.addWidget(
+            self._create_field("Floating Cover", self.floating_cover_mode_input)
+        )
         right_column.addStretch(1)
 
         credentials_layout = QVBoxLayout()
@@ -714,7 +723,9 @@ class OverlayWindow(QWidget):
             self._last_non_toggle_lyric_color = config.lyric_text_color or self._DEFAULT_LYRIC_COLOR
         self.auto_save_lrc_checkbox.setChecked(config.auto_save_fetched_lrc)
         self._show_album_cover = config.show_album_cover
+        self._floating_cover_mode = config.floating_cover_mode or ALWAYS_FLOATING_COVER_MODE
         self.show_album_cover_checkbox.setChecked(config.show_album_cover)
+        self._set_combo_data(self.floating_cover_mode_input, self._floating_cover_mode)
         self._show_settings_button = config.show_settings_button
         self._show_hide_button = config.show_hide_button
         self._hover_buttons_enabled = config.hover_buttons_enabled
@@ -755,6 +766,7 @@ class OverlayWindow(QWidget):
             lyric_lines=self.lyric_lines_input.currentData(),
             track_info_mode=self.track_info_mode_input.currentData(),
             show_album_cover=self.show_album_cover_checkbox.isChecked(),
+            floating_cover_mode=self.floating_cover_mode_input.currentData(),
             show_settings_button=self._show_settings_button,
             show_hide_button=self._show_hide_button,
             hover_buttons_enabled=self.hover_buttons_checkbox.isChecked(),
@@ -775,6 +787,7 @@ class OverlayWindow(QWidget):
         self._lyric_lines = config.lyric_lines or SINGLE_LYRIC_LINES
         self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
         self._show_album_cover = config.show_album_cover
+        self._floating_cover_mode = config.floating_cover_mode or ALWAYS_FLOATING_COVER_MODE
         self._apply_theme()
         self._sync_album_cover_ui()
 
@@ -808,11 +821,14 @@ class OverlayWindow(QWidget):
         self._sync_album_cover_ui()
 
     def _sync_album_cover_ui(self) -> None:
+        floating_visible = self._display_style == FLOATING_DISPLAY_STYLE and (
+            self._floating_cover_mode == ALWAYS_FLOATING_COVER_MODE or self._mouse_over_overlay
+        )
         should_show = (
             self._show_album_cover
-            and self._display_style == CARD_DISPLAY_STYLE
             and not self._expanded
             and self._album_cover_source is not None
+            and (self._display_style == CARD_DISPLAY_STYLE or floating_visible)
         )
         if should_show:
             self.album_cover_label.setPixmap(self._rounded_cover_pixmap(self._album_cover_source))
@@ -821,6 +837,7 @@ class OverlayWindow(QWidget):
         self.album_cover_label.setVisible(should_show)
         self._last_window_size = None
         self._apply_window_mode_if_needed()
+        self.update()
 
     def _rounded_cover_pixmap(self, source: QPixmap) -> QPixmap:
         size = self._ALBUM_COVER_SIZE
@@ -843,7 +860,6 @@ class OverlayWindow(QWidget):
         painter.drawPixmap(0, 0, cropped)
         painter.end()
         return rounded
-        self.update()
 
     def playback_source(self) -> str:
         return self._playback_source
@@ -1630,6 +1646,7 @@ class OverlayWindow(QWidget):
             self._sync_overlay_buttons_ui()
             self._apply_window_mode_if_needed()
         if self._display_style == FLOATING_DISPLAY_STYLE:
+            self._sync_album_cover_ui()
             self.update()
 
     def leaveEvent(self, event) -> None:  # noqa: N802
@@ -1639,6 +1656,7 @@ class OverlayWindow(QWidget):
             self._sync_overlay_buttons_ui()
             self._apply_window_mode_if_needed()
         if self._display_style == FLOATING_DISPLAY_STYLE:
+            self._sync_album_cover_ui()
             self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
