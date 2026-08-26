@@ -48,6 +48,7 @@ from .models import TrackInfo
 def shortcuts_guide_lines() -> list[tuple[str, str]]:
     return [
         ("Ctrl+R", "Reload playback"),
+        ("Ctrl+H", "Snap overlay home"),
         ("Shift+C", "Toggle lyric color"),
         ("Shift+S", "Open or close settings"),
         ("Shift+F", "Hide overlay to tray"),
@@ -1579,16 +1580,35 @@ class OverlayWindow(QWidget):
         return max(self._COMPACT_MIN_HEIGHT, total)
 
     def _position_top_center(self) -> None:
-        screen = self.screen() or QApplication.primaryScreen()
-        if screen is None:
+        home_pos = self._home_position()
+        if home_pos is None:
             return
-
-        geometry = screen.availableGeometry()
-        x = geometry.x() + (geometry.width() - self.width()) // 2
-        y = geometry.y() + 12
-        self.move(x, y)
+        self.move(home_pos)
         if self._snap_pos is None:
             self._snap_pos = self.pos()
+
+    def _home_position(self) -> QPoint | None:
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return None
+        geometry = screen.availableGeometry()
+        return QPoint(
+            geometry.x() + (geometry.width() - self.width()) // 2,
+            geometry.y() + 12,
+        )
+
+    def snap_to_home(self) -> None:
+        home_pos = self._home_position()
+        if home_pos is None:
+            return
+        self._resize_animation.stop()
+        self._drag_press_global = None
+        self._drag_start_window_pos = None
+        self._dragging = False
+        self._layout_refresh_pending = False
+        self._user_positioned = False
+        self._snap_pos = home_pos
+        self.move(home_pos)
 
     def _reposition_after_resize(self) -> None:
         if self._dragging:
@@ -1802,6 +1822,10 @@ class OverlayWindow(QWidget):
         return was_dragging
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_H and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.snap_to_home()
+            event.accept()
+            return
         if event.key() == Qt.Key.Key_R and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             self.trigger_reconnect_shortcut()
             event.accept()
