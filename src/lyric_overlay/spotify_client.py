@@ -131,7 +131,9 @@ class WindowsMediaSpotifyClient:
                 reader.close()
                 stream.close()
                 return None
-            data = bytes(reader.read_bytes(loaded))
+            output = bytearray(loaded)
+            reader.read_bytes(output)
+            data = bytes(output)
             reader.close()
             stream.close()
             return data or None

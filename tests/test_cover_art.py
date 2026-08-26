@@ -40,11 +40,11 @@ def test_cache_is_bounded(monkeypatch):
     assert list(repository._cache) == ["1", "2"]
 
 
-def test_missing_cover_is_cached(monkeypatch):
+def test_missing_windows_cover_can_be_retried(monkeypatch):
     repository = CoverArtRepository()
     calls = []
     monkeypatch.setattr(repository, "_download_cover", lambda url: calls.append(url) or None)
     track = _track("one")
     assert repository.get_cover(track) is None
     assert repository.get_cover(track) is None
-    assert len(calls) == 1
+    assert len(calls) == 2

@@ -25,19 +25,32 @@ class CoverArtRepository:
             return self._cache[key]
 
         data = track.cover_data or self._download_cover(track.cover_url)
-        self._cache[key] = data
-        self._cache.move_to_end(key)
-        while len(self._cache) > self.max_entries:
-            self._cache.popitem(last=False)
+        if data is not None or track.cover_url:
+            self._cache[key] = data
+            self._cache.move_to_end(key)
+            while len(self._cache) > self.max_entries:
+                self._cache.popitem(last=False)
         return data
 
     def _download_cover(self, url: str | None) -> bytes | None:
         if not url:
             return None
         try:
-            response = self._session.get(url, timeout=COVER_TIMEOUT_SECONDS)
+            response = self._session.get(url, timeout=COVER_TIMEOUT_SECONDS, stream=True)
             response.raise_for_status()
-            content = response.content
+            content_length = int(response.headers.get("Content-Length") or 0)
+            if content_length > MAX_COVER_BYTES:
+                return None
+            parts: list[bytes] = []
+            size = 0
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > MAX_COVER_BYTES:
+                    return None
+                parts.append(chunk)
+            content = b"".join(parts)
         except requests.RequestException:
             return None
         if not content or len(content) > MAX_COVER_BYTES:

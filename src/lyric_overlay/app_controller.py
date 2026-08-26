@@ -131,6 +131,7 @@ class AppController(QObject):
         self._lyrics_retry_count = 0
         self._lyrics_retry_due_at = 0.0
         self._cover_request_id = 0
+        self._cover_retry_due_at = 0.0
         self._render_timer = QTimer(self)
         self._render_timer.setInterval(self._RENDER_INTERVAL_MS)
         self._render_timer.timeout.connect(self._render_current_state)
@@ -166,6 +167,7 @@ class AppController(QObject):
         self._lyrics_retry_count = 0
         self._lyrics_retry_due_at = 0.0
         self._cover_request_id += 1
+        self._cover_retry_due_at = 0.0
         self.sync_engine.set_lyrics(LyricsData(source="none", lines=[]))
         self.overlay.load_config_values(config)
         if self.playback_client is None:
@@ -195,6 +197,7 @@ class AppController(QObject):
             self._lyrics_retry_count = 0
             self._lyrics_retry_due_at = 0.0
             self._cover_request_id += 1
+            self._cover_retry_due_at = 0.0
             self.snapshot = PlaybackSnapshot(track=None, lyrics=LyricsData(source="none", lines=[]))
             self.sync_engine.set_lyrics(self.snapshot.lyrics)
             self.overlay.set_track(None)
@@ -210,13 +213,16 @@ class AppController(QObject):
             self._lyrics_retry_due_at = 0.0
             self.snapshot = PlaybackSnapshot(track=track, lyrics=LyricsData(source="none", lines=[]))
             self._cover_request_id += 1
+            self._cover_retry_due_at = 0.0
             self.overlay.set_album_cover(None)
             if self.config.show_album_cover:
-                self.cover_worker.fetch(track, self._cover_request_id)
+                self._request_album_cover(track)
             self._request_lyrics(track)
         else:
             self.snapshot.track = track
             self._retry_lyrics_if_needed(track)
+            if self.config.show_album_cover and time.monotonic() >= self._cover_retry_due_at:
+                self._request_album_cover(track)
 
         self._last_track_refresh_at = time.monotonic()
         self._last_rendered_line = None
@@ -234,10 +240,15 @@ class AppController(QObject):
 
     def refresh_album_cover(self) -> None:
         self._cover_request_id += 1
+        self._cover_retry_due_at = 0.0
         self.overlay.set_album_cover(None)
         track = self.snapshot.track
         if self.config.show_album_cover and track is not None:
-            self.cover_worker.fetch(track, self._cover_request_id)
+            self._request_album_cover(track)
+
+    def _request_album_cover(self, track: TrackInfo) -> None:
+        self._cover_retry_due_at = float("inf")
+        self.cover_worker.fetch(track, self._cover_request_id)
 
     def _apply_fetched_cover(self, track_id: str, data: bytes | None, request_id: int) -> None:
         track = self.snapshot.track
@@ -245,6 +256,7 @@ class AppController(QObject):
             return
         if not self.config.show_album_cover:
             return
+        self._cover_retry_due_at = 0.0 if data else time.monotonic() + 5.0
         self.overlay.set_album_cover(data)
 
     def show_error(self, message: str) -> None:

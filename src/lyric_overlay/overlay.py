@@ -1500,7 +1500,8 @@ class OverlayWindow(QWidget):
 
         content_width = max(320, target_width - outer_margins.left() - outer_margins.right())
         card_width = max(280, content_width - card_margins.left() - card_margins.right())
-        compact_width = max(240, card_width - 64)
+        cover_width = self._ALBUM_COVER_SIZE + 10 if self.album_cover_label.isVisible() else 0
+        compact_width = max(180, card_width - 64 - cover_width)
 
         compact_height = self.compact_label.heightForWidth(compact_width)
         if compact_height <= 0:
@@ -1518,6 +1519,10 @@ class OverlayWindow(QWidget):
 
         if visible_extra_heights:
             total += spacing * len(visible_extra_heights) + sum(visible_extra_heights)
+
+        if self.album_cover_label.isVisible():
+            cover_height = self._ALBUM_COVER_SIZE + card_margins.top() + card_margins.bottom()
+            total = max(total, outer_height + cover_height)
 
         return max(self._COMPACT_MIN_HEIGHT, total)
 
