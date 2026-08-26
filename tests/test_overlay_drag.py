@@ -115,3 +115,48 @@ def test_snap_to_home_clears_active_drag_state():
 
 def test_shortcut_guide_lists_shift_h():
     assert ("Shift+H", "Snap overlay home") in shortcuts_guide_lines()
+
+
+def test_compact_overlay_can_remain_partially_beyond_left_edge():
+    overlay = _overlay()
+    available = overlay.screen().availableGeometry()
+    requested = QPoint(available.left() - overlay.width() + 80, overlay.y())
+    assert overlay._clamped_compact_horizontal_pos(requested) == requested
+
+
+def test_compact_overlay_keeps_minimum_visible_width_on_left():
+    overlay = _overlay()
+    available = overlay.screen().availableGeometry()
+    requested = QPoint(available.left() - overlay.width() - 200, overlay.y())
+    clamped = overlay._clamped_compact_horizontal_pos(requested)
+    assert clamped.x() == available.left() - overlay.width() + overlay._MIN_VISIBLE_DRAG_WIDTH
+
+
+def test_compact_overlay_keeps_minimum_visible_width_on_right():
+    overlay = _overlay()
+    available = overlay.screen().availableGeometry()
+    requested = QPoint(available.right() + 200, overlay.y())
+    clamped = overlay._clamped_compact_horizontal_pos(requested)
+    assert clamped.x() == available.right() - overlay._MIN_VISIBLE_DRAG_WIDTH + 1
+
+
+def test_settings_overlay_is_fully_clamped_horizontally():
+    overlay = _overlay()
+    available = overlay.screen().availableGeometry()
+    requested = QPoint(available.left() - 200, overlay.y())
+    assert overlay._clamped_settings_horizontal_pos(requested).x() == available.left()
+
+    requested = QPoint(available.right() + 200, overlay.y())
+    max_x = max(available.left(), available.right() - overlay.width() + 1)
+    assert overlay._clamped_settings_horizontal_pos(requested).x() == max_x
+
+
+def test_snap_home_recovers_partially_offscreen_overlay():
+    overlay = _overlay()
+    available = overlay.screen().availableGeometry()
+    overlay.move(available.left() - overlay.width() + overlay._MIN_VISIBLE_DRAG_WIDTH, overlay.y())
+    overlay._snap_pos = overlay.pos()
+    overlay._user_positioned = True
+    overlay.snap_to_home()
+    assert overlay.pos() == overlay._home_position()
+    assert available.contains(overlay.geometry())
