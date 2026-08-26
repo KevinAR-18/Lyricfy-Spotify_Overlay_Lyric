@@ -145,6 +145,8 @@ DISPLAY_STYLE=card
 LYRIC_LINES=single
 TRACK_INFO_MODE=track_change
 SHOW_ALBUM_COVER=false
+FLOATING_COVER_MODE=always
+OVERLAY_CORNER_RADIUS=30
 SHOW_SETTINGS_BUTTON=true
 SHOW_HIDE_BUTTON=true
 HOVER_BUTTONS_ENABLED=false
@@ -228,6 +230,8 @@ The built-in settings panel supports:
 - Lyric Color
 - Lyric Glow Color
 - Optional album cover in Card mode
+- Floating cover visibility (`Always Visible` or `On Hover`)
+- Overlay corner radius (`0` to `40` px)
 - Auto-save fetched LRCLIB lyrics as local `.lrc` cache
 - Shortcut guide
 - Reset Default
@@ -248,10 +252,16 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 ### Album Cover
 
 - Album artwork is optional and disabled by default.
-- Enable `Show album cover in Card mode` in Settings to place a 48px rounded cover beside the lyrics.
+- Enable `Show album cover` in Settings to place a 48px rounded cover beside the lyrics.
 - Spotify API mode uses the album image URL from Spotify; Non-API mode uses artwork exposed by the Windows media session when available.
 - If artwork is loading, missing, or invalid, Lyricfy automatically keeps the normal lyric-only layout without a placeholder or error.
-- Floating presets always remain text-only even when the album cover preference is enabled.
+- Floating presets can keep artwork `Always Visible` or show it only `On Hover`.
+
+### Overlay Corner Radius
+
+- `Overlay Corner Radius` controls the rounded corners of the Card background, Settings background, and subtle Floating hover background.
+- The supported range is `0` to `40` pixels. `0` produces square corners and the default remains `30` pixels.
+- Album artwork keeps its own fixed 8px corner radius.
 
 `PLAYBACK_SOURCE` supports:
 
