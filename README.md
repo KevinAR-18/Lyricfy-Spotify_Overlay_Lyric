@@ -19,7 +19,8 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Custom overlay corner radius from 0 to 40px
 - Track information visibility options: on track change, always, or never
 - Hover controls that respect individual Settings and Hide button preferences
-- Draggable overlay with snap-back behavior near the last saved position
+- Smooth draggable overlay with stable positioning during lyric, artwork, hover, and monitor changes
+- Small overlay position adjustments are accepted without snapping back to the previous position
 - System tray controls for show, hide, settings, and exit
 - System tray playback mode switch between `Non-API` and `API`
 - In-app settings for display presets, artwork, Spotify credentials, lyric offset, alignment, font, and colors
