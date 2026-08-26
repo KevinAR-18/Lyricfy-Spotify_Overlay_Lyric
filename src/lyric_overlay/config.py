@@ -65,6 +65,9 @@ TRACK_CHANGE_INFO_MODE = "track_change"
 ALWAYS_TRACK_INFO_MODE = "always"
 NEVER_TRACK_INFO_MODE = "never"
 TRACK_INFO_MODES = {TRACK_CHANGE_INFO_MODE, ALWAYS_TRACK_INFO_MODE, NEVER_TRACK_INFO_MODE}
+ALWAYS_FLOATING_COVER_MODE = "always"
+HOVER_FLOATING_COVER_MODE = "hover"
+FLOATING_COVER_MODES = {ALWAYS_FLOATING_COVER_MODE, HOVER_FLOATING_COVER_MODE}
 CARD_DEFAULT_PRESET = "card_default"
 FLOATING_MINIMAL_PRESET = "floating_minimal"
 FLOATING_CONTEXT_PRESET = "floating_context"
@@ -103,6 +106,8 @@ class AppConfig:
     lyric_lines: str = SINGLE_LYRIC_LINES
     track_info_mode: str = TRACK_CHANGE_INFO_MODE
     show_album_cover: bool = False
+    floating_cover_mode: str = ALWAYS_FLOATING_COVER_MODE
+    overlay_corner_radius: int = 30
     show_settings_button: bool = True
     show_hide_button: bool = True
     hover_buttons_enabled: bool = False
@@ -133,6 +138,8 @@ def default_config() -> AppConfig:
         lyric_lines=SINGLE_LYRIC_LINES,
         track_info_mode=TRACK_CHANGE_INFO_MODE,
         show_album_cover=False,
+        floating_cover_mode=ALWAYS_FLOATING_COVER_MODE,
+        overlay_corner_radius=30,
         show_settings_button=True,
         show_hide_button=True,
         hover_buttons_enabled=False,
@@ -178,6 +185,10 @@ def load_config() -> AppConfig:
             os.getenv("TRACK_INFO_MODE", TRACK_CHANGE_INFO_MODE)
         ),
         show_album_cover=os.getenv("SHOW_ALBUM_COVER", "false").lower() == "true",
+        floating_cover_mode=_normalize_floating_cover_mode(
+            os.getenv("FLOATING_COVER_MODE", ALWAYS_FLOATING_COVER_MODE)
+        ),
+        overlay_corner_radius=_parse_int(os.getenv("OVERLAY_CORNER_RADIUS"), default=30, minimum=0, maximum=40),
         show_settings_button=os.getenv("SHOW_SETTINGS_BUTTON", "true").lower() == "true",
         show_hide_button=os.getenv("SHOW_HIDE_BUTTON", "true").lower() == "true",
         hover_buttons_enabled=os.getenv("HOVER_BUTTONS_ENABLED", "false").lower() == "true",
@@ -243,6 +254,13 @@ def _normalize_track_info_mode(value: str) -> str:
     return TRACK_CHANGE_INFO_MODE
 
 
+def _normalize_floating_cover_mode(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in FLOATING_COVER_MODES:
+        return normalized
+    return ALWAYS_FLOATING_COVER_MODE
+
+
 def display_preset_for(config: AppConfig) -> str:
     values = (
         _normalize_display_style(config.display_style),
@@ -282,6 +300,8 @@ def save_config(config: AppConfig) -> None:
         f"LYRIC_LINES={_normalize_lyric_lines(config.lyric_lines)}",
         f"TRACK_INFO_MODE={_normalize_track_info_mode(config.track_info_mode)}",
         f"SHOW_ALBUM_COVER={'true' if config.show_album_cover else 'false'}",
+        f"FLOATING_COVER_MODE={_normalize_floating_cover_mode(config.floating_cover_mode)}",
+        f"OVERLAY_CORNER_RADIUS={max(0, min(40, config.overlay_corner_radius))}",
         f"SHOW_SETTINGS_BUTTON={'true' if config.show_settings_button else 'false'}",
         f"SHOW_HIDE_BUTTON={'true' if config.show_hide_button else 'false'}",
         f"HOVER_BUTTONS_ENABLED={'true' if config.hover_buttons_enabled else 'false'}",

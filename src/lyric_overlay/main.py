@@ -160,6 +160,8 @@ def main() -> int:
             lyric_lines=updates.lyric_lines,
             track_info_mode=updates.track_info_mode,
             show_album_cover=updates.show_album_cover,
+            floating_cover_mode=updates.floating_cover_mode,
+            overlay_corner_radius=updates.overlay_corner_radius,
             show_settings_button=updates.show_settings_button,
             show_hide_button=updates.show_hide_button,
             hover_buttons_enabled=updates.hover_buttons_enabled,
