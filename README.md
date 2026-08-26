@@ -289,7 +289,7 @@ You can also change the mode from the tray menu:
 - `Overlay Controls` -> show or hide the overlay controls and enable `Card Controls on Hover`
 - `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
 - `Display Preset` -> `Card Default`, `Floating Minimal`, or `Floating Context`
-- `Lyricfy v1.4.0`
+- `Lyricfy v1.4.1`
 
 Recommended value:
 
