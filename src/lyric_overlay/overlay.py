@@ -198,7 +198,6 @@ class OverlayWindow(QWidget):
     _HEADER_VISIBLE_DURATION_SECONDS = 7.0
     _NO_LYRICS_NOTICE_SECONDS = 4.0
     _COMPACT_MIN_HEIGHT = 60
-    _OVERLAY_CORNER_RADIUS = 30
     _COMPACT_WINDOW_WIDTH = 620
     _EXPANDED_WINDOW_WIDTH = 740
     _API_COLUMN_EXTRA_WIDTH = 260
@@ -223,6 +222,7 @@ class OverlayWindow(QWidget):
         self._header_visible_until = 0.0
         self._no_lyrics_notice_until = 0.0
         self._overlay_bg_color = "#0A0A0AEB"
+        self._overlay_corner_radius = 30
         self._overlay_text_color = "#F4F4F4"
         self._lyric_text_color = "#F4F4F4"
         self._lyric_glow_color = "#66CCFFFF"
@@ -364,6 +364,13 @@ class OverlayWindow(QWidget):
         self.floating_cover_mode_input = QComboBox()
         self.floating_cover_mode_input.addItem("Always Visible", ALWAYS_FLOATING_COVER_MODE)
         self.floating_cover_mode_input.addItem("On Hover", HOVER_FLOATING_COVER_MODE)
+        self.overlay_corner_radius_input = QSpinBox()
+        self.overlay_corner_radius_input.setRange(0, 40)
+        self.overlay_corner_radius_input.setSingleStep(1)
+        self.overlay_corner_radius_input.setSuffix(" px")
+        self.overlay_corner_radius_input.setToolTip(
+            "0 creates square corners. Higher values make the overlay more rounded."
+        )
         self.hover_buttons_checkbox = QCheckBox("Card controls on hover")
         self.hover_buttons_checkbox.setToolTip(
             "Floating presets always show Settings and Hide controls on hover."
@@ -452,6 +459,9 @@ class OverlayWindow(QWidget):
         right_column.addWidget(
             self._create_field("Floating Cover", self.floating_cover_mode_input)
         )
+        right_column.addWidget(
+            self._create_field("Overlay Corner Radius", self.overlay_corner_radius_input)
+        )
         right_column.addStretch(1)
 
         credentials_layout = QVBoxLayout()
@@ -516,6 +526,7 @@ class OverlayWindow(QWidget):
         self.lyric_lines_input.currentIndexChanged.connect(self._sync_custom_display_preset)
         self.track_info_mode_input.currentIndexChanged.connect(self._sync_custom_display_preset)
         self.hover_buttons_checkbox.toggled.connect(self._preview_card_hover_controls)
+        self.overlay_corner_radius_input.valueChanged.connect(self._preview_overlay_corner_radius)
 
         self._sync_playback_source_ui()
         self._apply_theme()
@@ -724,8 +735,10 @@ class OverlayWindow(QWidget):
         self.auto_save_lrc_checkbox.setChecked(config.auto_save_fetched_lrc)
         self._show_album_cover = config.show_album_cover
         self._floating_cover_mode = config.floating_cover_mode or ALWAYS_FLOATING_COVER_MODE
+        self._overlay_corner_radius = max(0, min(40, config.overlay_corner_radius))
         self.show_album_cover_checkbox.setChecked(config.show_album_cover)
         self._set_combo_data(self.floating_cover_mode_input, self._floating_cover_mode)
+        self.overlay_corner_radius_input.setValue(self._overlay_corner_radius)
         self._show_settings_button = config.show_settings_button
         self._show_hide_button = config.show_hide_button
         self._hover_buttons_enabled = config.hover_buttons_enabled
@@ -767,6 +780,7 @@ class OverlayWindow(QWidget):
             track_info_mode=self.track_info_mode_input.currentData(),
             show_album_cover=self.show_album_cover_checkbox.isChecked(),
             floating_cover_mode=self.floating_cover_mode_input.currentData(),
+            overlay_corner_radius=self.overlay_corner_radius_input.value(),
             show_settings_button=self._show_settings_button,
             show_hide_button=self._show_hide_button,
             hover_buttons_enabled=self.hover_buttons_checkbox.isChecked(),
@@ -788,6 +802,7 @@ class OverlayWindow(QWidget):
         self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
         self._show_album_cover = config.show_album_cover
         self._floating_cover_mode = config.floating_cover_mode or ALWAYS_FLOATING_COVER_MODE
+        self._overlay_corner_radius = max(0, min(40, config.overlay_corner_radius))
         self._apply_theme()
         self._sync_album_cover_ui()
 
@@ -1328,6 +1343,10 @@ class OverlayWindow(QWidget):
         self._apply_window_mode_if_needed()
         self.update()
 
+    def _preview_overlay_corner_radius(self, radius: int) -> None:
+        self._overlay_corner_radius = max(0, min(40, radius))
+        self.update()
+
     def _set_startup_visibility_selection(self, start_hidden: bool) -> None:
         for index in range(self.startup_visibility_input.count()):
             if bool(self.startup_visibility_input.itemData(index)) == start_hidden:
@@ -1675,7 +1694,11 @@ class OverlayWindow(QWidget):
             background.setAlpha(min(background.alpha(), 72))
         painter.setBrush(background)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        radius = min(self._OVERLAY_CORNER_RADIUS, max(1.0, rect.height() / 2))
+        radius = min(
+            float(self._overlay_corner_radius),
+            max(0.0, rect.height() / 2),
+            max(0.0, rect.width() / 2),
+        )
         painter.drawRoundedRect(rect, radius, radius)
 
     def _overlay_background_qcolor(self) -> QColor:
