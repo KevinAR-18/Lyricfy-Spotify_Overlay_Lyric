@@ -209,6 +209,7 @@ class OverlayWindow(QWidget):
         self._drag_press_global: QPoint | None = None
         self._drag_start_window_pos: QPoint | None = None
         self._dragging = False
+        self._layout_refresh_pending = False
         self._initial_positioned = False
         self._expanded = False
         self._snap_pos = None
@@ -1466,6 +1467,9 @@ class OverlayWindow(QWidget):
             self._apply_window_mode()
 
     def _apply_window_mode(self) -> None:
+        if self._dragging:
+            self._layout_refresh_pending = True
+            return
         width_bonus = max(0, self._lyric_font_size - 11) * 16
         target_width = self._target_window_width() + width_bonus
         if self._expanded:
@@ -1587,6 +1591,9 @@ class OverlayWindow(QWidget):
             self._snap_pos = self.pos()
 
     def _reposition_after_resize(self) -> None:
+        if self._dragging:
+            self._layout_refresh_pending = True
+            return
         if self._user_positioned and self._snap_pos is not None:
             self._snap_pos = self._clamped_horizontal_pos(self._snap_pos)
             self.move(self._snap_pos)
@@ -1610,6 +1617,9 @@ class OverlayWindow(QWidget):
         self._last_screen = screen
         self._last_window_size = None
         self._resize_animation.stop()
+        if self._dragging:
+            self._layout_refresh_pending = True
+            return
         self._apply_window_mode()
 
     def moveEvent(self, event) -> None:  # noqa: N802
@@ -1673,6 +1683,8 @@ class OverlayWindow(QWidget):
 
     def enterEvent(self, event) -> None:  # noqa: N802
         super().enterEvent(event)
+        if self._dragging:
+            return
         self._mouse_over_overlay = True
         if self._uses_hover_controls():
             self._sync_overlay_buttons_ui()
@@ -1683,6 +1695,8 @@ class OverlayWindow(QWidget):
 
     def leaveEvent(self, event) -> None:  # noqa: N802
         super().leaveEvent(event)
+        if self._dragging:
+            return
         self._mouse_over_overlay = False
         if self._uses_hover_controls():
             self._sync_overlay_buttons_ui()
@@ -1757,6 +1771,9 @@ class OverlayWindow(QWidget):
             if distance < self._DRAG_START_DISTANCE:
                 return False
             self._dragging = True
+            self._mouse_over_overlay = True
+            self._resize_animation.stop()
+            self._topmost_timer.stop()
 
         self.move(self._drag_start_window_pos + delta)
         return True
@@ -1770,6 +1787,17 @@ class OverlayWindow(QWidget):
         self._drag_press_global = None
         self._drag_start_window_pos = None
         self._dragging = False
+
+        if was_dragging and not self._allow_exit and not self._hide_requested and self.isVisible():
+            self._topmost_timer.start()
+            force_windows_topmost(self)
+
+        if was_dragging or self._layout_refresh_pending:
+            self._layout_refresh_pending = False
+            self._last_window_size = None
+            self._sync_overlay_buttons_ui()
+            self._sync_album_cover_ui()
+            self.update()
 
         return was_dragging
 
