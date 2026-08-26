@@ -509,12 +509,12 @@ class OverlayWindow(QWidget):
         compact_text_layout.addWidget(self.next_line_label)
         compact_text_layout.addWidget(self.track_title_label)
         compact_text_layout.addWidget(self.status_label)
-        compact_row = QHBoxLayout()
-        compact_row.setContentsMargins(0, 0, 0, 0)
-        compact_row.setSpacing(10)
-        compact_row.addWidget(self.album_cover_label, 0, Qt.AlignmentFlag.AlignTop)
-        compact_row.addWidget(self._compact_text_widget, 1)
-        card_layout.addLayout(compact_row)
+        self._compact_row = QHBoxLayout()
+        self._compact_row.setContentsMargins(0, 0, 0, 0)
+        self._compact_row.setSpacing(10)
+        self._compact_row.addWidget(self.album_cover_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._compact_row.addWidget(self._compact_text_widget, 1)
+        card_layout.addLayout(self._compact_row)
         card_layout.addWidget(self.settings_panel)
 
         self._lyric_glow = QGraphicsDropShadowEffect(self)
@@ -851,6 +851,7 @@ class OverlayWindow(QWidget):
         else:
             self.album_cover_label.clear()
         self.album_cover_label.setVisible(should_show)
+        self._sync_album_cover_alignment()
         self._last_window_size = None
         self._apply_window_mode_if_needed()
         self.update()
@@ -876,6 +877,14 @@ class OverlayWindow(QWidget):
         painter.drawPixmap(0, 0, cropped)
         painter.end()
         return rounded
+
+    def _sync_album_cover_alignment(self) -> None:
+        alignment = (
+            Qt.AlignmentFlag.AlignTop
+            if self._current_line_text
+            else Qt.AlignmentFlag.AlignVCenter
+        )
+        self._compact_row.setAlignment(self.album_cover_label, alignment)
 
     def playback_source(self) -> str:
         return self._playback_source
@@ -1220,6 +1229,7 @@ class OverlayWindow(QWidget):
             self._format_next_line_text(self._next_line_text, available_width=compact_width)
         )
         self.next_line_label.setVisible(show_next)
+        self._sync_album_cover_alignment()
         self._schedule_transient_refresh()
 
     def _apply_text_preferences(self) -> None:
