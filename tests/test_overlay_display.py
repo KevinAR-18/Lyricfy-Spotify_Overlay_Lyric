@@ -162,9 +162,46 @@ def test_album_cover_shows_only_in_card_mode():
     overlay.set_album_cover(_image_bytes())
     assert not overlay.album_cover_label.isHidden()
     overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
-    assert overlay.album_cover_label.isHidden()
+    assert not overlay.album_cover_label.isHidden()
     overlay.apply_display_preset(CARD_DEFAULT_PRESET)
     assert not overlay.album_cover_label.isHidden()
+
+
+def test_floating_cover_can_be_hover_only():
+    overlay = _overlay()
+    overlay._show_album_cover = True
+    overlay._floating_cover_mode = "hover"
+    overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
+    overlay._mouse_over_overlay = False
+    overlay.set_album_cover(_image_bytes())
+    assert overlay.album_cover_label.isHidden()
+
+    overlay._mouse_over_overlay = True
+    overlay._sync_album_cover_ui()
+    assert not overlay.album_cover_label.isHidden()
+
+    overlay._mouse_over_overlay = False
+    overlay._sync_album_cover_ui()
+    assert overlay.album_cover_label.isHidden()
+
+
+def test_album_cover_hides_while_settings_are_open():
+    overlay = _overlay()
+    overlay._show_album_cover = True
+    overlay.set_album_cover(_image_bytes())
+    assert not overlay.album_cover_label.isHidden()
+    overlay._expanded = True
+    overlay._sync_album_cover_ui()
+    assert overlay.album_cover_label.isHidden()
+
+
+def test_corner_radius_preview_updates_state():
+    overlay = _overlay()
+    assert overlay._overlay_corner_radius == 30
+    overlay.overlay_corner_radius_input.setValue(12)
+    assert overlay._overlay_corner_radius == 12
+    overlay.overlay_corner_radius_input.setValue(0)
+    assert overlay._overlay_corner_radius == 0
 
 
 def test_invalid_or_missing_cover_collapses_layout():

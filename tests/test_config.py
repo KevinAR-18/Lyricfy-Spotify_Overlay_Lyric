@@ -1,11 +1,13 @@
 from lyric_overlay import config as config_module
 from lyric_overlay.config import (
+    ALWAYS_FLOATING_COVER_MODE,
     CARD_DEFAULT_PRESET,
     CUSTOM_DISPLAY_PRESET,
     FLOATING_CONTEXT_PRESET,
     FLOATING_MINIMAL_PRESET,
     WINDOWS_PLAYBACK_SOURCE,
     _normalize_display_style,
+    _normalize_floating_cover_mode,
     _normalize_lyric_lines,
     _normalize_playback_source,
     _normalize_text_alignment,
@@ -53,6 +55,8 @@ class TestDefaultConfig:
         assert cfg.lrclib_enabled is True
         assert cfg.text_alignment == "left"
         assert cfg.show_album_cover is False
+        assert cfg.floating_cover_mode == ALWAYS_FLOATING_COVER_MODE
+        assert cfg.overlay_corner_radius == 30
         assert display_preset_for(cfg) == CARD_DEFAULT_PRESET
 
 
@@ -61,6 +65,8 @@ class TestDisplayConfig:
         assert _normalize_display_style("invalid") == "card"
         assert _normalize_lyric_lines("invalid") == "single"
         assert _normalize_track_info_mode("invalid") == "track_change"
+        assert _normalize_floating_cover_mode("invalid") == ALWAYS_FLOATING_COVER_MODE
+        assert _normalize_floating_cover_mode("hover") == "hover"
 
     def test_builtin_presets(self):
         config = default_config()
@@ -99,6 +105,8 @@ class TestSaveLoadRoundTrip:
         original.lyric_lines = "current_next"
         original.track_info_mode = "always"
         original.show_album_cover = True
+        original.floating_cover_mode = "hover"
+        original.overlay_corner_radius = 12
 
         config_module.save_config(original)
         assert env_file.exists()
@@ -114,3 +122,12 @@ class TestSaveLoadRoundTrip:
         assert loaded.lyric_lines == "current_next"
         assert loaded.track_info_mode == "always"
         assert loaded.show_album_cover is True
+        assert loaded.floating_cover_mode == "hover"
+        assert loaded.overlay_corner_radius == 12
+
+    def test_corner_radius_is_clamped(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        monkeypatch.setattr(config_module, "ENV_FILE", env_file)
+        monkeypatch.setattr(config_module, "FALLBACK_ENV_FILE", tmp_path / "missing.env")
+        env_file.write_text("OVERLAY_CORNER_RADIUS=99\n", encoding="utf-8")
+        assert config_module.load_config().overlay_corner_radius == 40

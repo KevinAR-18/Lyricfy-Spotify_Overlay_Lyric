@@ -261,6 +261,14 @@ def _normalize_floating_cover_mode(value: str) -> str:
     return ALWAYS_FLOATING_COVER_MODE
 
 
+def _parse_int(value: str | None, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int((value or "").strip())
+    except ValueError:
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
 def display_preset_for(config: AppConfig) -> str:
     values = (
         _normalize_display_style(config.display_style),
