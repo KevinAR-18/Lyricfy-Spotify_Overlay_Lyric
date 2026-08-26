@@ -113,5 +113,5 @@ def test_snap_to_home_clears_active_drag_state():
     assert overlay._layout_refresh_pending is False
 
 
-def test_shortcut_guide_lists_ctrl_h():
-    assert ("Ctrl+H", "Snap overlay home") in shortcuts_guide_lines()
+def test_shortcut_guide_lists_shift_h():
+    assert ("Shift+H", "Snap overlay home") in shortcuts_guide_lines()

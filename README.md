@@ -34,6 +34,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - `Shift+S` shortcut to open or close settings quickly
 - `Shift+F` shortcut to hide the overlay to tray quickly
 - `Ctrl+R` shortcut to reload Spotify connection quickly
+- `Shift+H` shortcut to return the overlay to the top-center of its current monitor
 
 ## Quick Start
 
@@ -285,6 +286,7 @@ You can also change the mode from the tray menu:
 - `Show Overlay`
 - `Hide Overlay`
 - `Open Settings`
+- `Snap Overlay Home` -> return the overlay to top-center on its current monitor
 - `Mode` -> `Non-API` or `API`
 - `Overlay Controls` -> show or hide the overlay controls and enable `Card Controls on Hover`
 - `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
@@ -378,6 +380,7 @@ The build script packages the app as a one-file windowed executable and includes
 - `Shift+S` opens or closes the settings panel
 - `Shift+F` hides the overlay to the system tray
 - `Ctrl+R` reloads the Spotify connection without opening settings
+- `Shift+H` snaps the overlay to its top-center home position on the current monitor
 
 ## Notes
 

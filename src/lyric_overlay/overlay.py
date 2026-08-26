@@ -48,7 +48,7 @@ from .models import TrackInfo
 def shortcuts_guide_lines() -> list[tuple[str, str]]:
     return [
         ("Ctrl+R", "Reload playback"),
-        ("Ctrl+H", "Snap overlay home"),
+        ("Shift+H", "Snap overlay home"),
         ("Shift+C", "Toggle lyric color"),
         ("Shift+S", "Open or close settings"),
         ("Shift+F", "Hide overlay to tray"),
@@ -1822,7 +1822,7 @@ class OverlayWindow(QWidget):
         return was_dragging
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
-        if event.key() == Qt.Key.Key_H and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        if event.key() == Qt.Key.Key_H and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.snap_to_home()
             event.accept()
             return

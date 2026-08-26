@@ -219,7 +219,7 @@ def main() -> int:
         hide_action = QAction("Hide Overlay", tray_menu)
         settings_action = QAction("Open Settings", tray_menu)
         snap_home_action = QAction("Snap Overlay Home", tray_menu)
-        snap_home_action.setShortcut("Ctrl+H")
+        snap_home_action.setShortcut("Shift+H")
         mode_menu = QMenu("Mode", tray_menu)
         overlay_buttons_menu = QMenu("Overlay Controls", tray_menu)
         startup_menu = QMenu("Startup", tray_menu)
