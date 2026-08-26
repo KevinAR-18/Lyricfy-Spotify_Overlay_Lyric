@@ -1,7 +1,7 @@
 from PySide6.QtCore import QPoint
 
 from lyric_overlay.config import default_config
-from lyric_overlay.overlay import OverlayWindow, create_application
+from lyric_overlay.overlay import OverlayWindow, create_application, shortcuts_guide_lines
 
 
 def _overlay():
@@ -78,3 +78,40 @@ def test_drag_state_is_cleared_after_release():
     assert overlay._drag_press_global is None
     assert overlay._drag_start_window_pos is None
     assert overlay._dragging is False
+
+
+def test_home_position_uses_current_screen_top_center():
+    overlay = _overlay()
+    home = overlay._home_position()
+    geometry = overlay.screen().availableGeometry()
+    assert home == QPoint(
+        geometry.x() + (geometry.width() - overlay.width()) // 2,
+        geometry.y() + 12,
+    )
+
+
+def test_snap_to_home_resets_user_position():
+    overlay = _overlay()
+    overlay.move(250, 300)
+    overlay._snap_pos = overlay.pos()
+    overlay._user_positioned = True
+    overlay.snap_to_home()
+    assert overlay.pos() == overlay._home_position()
+    assert overlay._snap_pos == overlay.pos()
+    assert overlay._user_positioned is False
+
+
+def test_snap_to_home_clears_active_drag_state():
+    overlay = _overlay()
+    overlay._prepare_drag(QPoint(100, 100))
+    overlay._continue_drag(QPoint(110, 110))
+    overlay._layout_refresh_pending = True
+    overlay.snap_to_home()
+    assert overlay._drag_press_global is None
+    assert overlay._drag_start_window_pos is None
+    assert overlay._dragging is False
+    assert overlay._layout_refresh_pending is False
+
+
+def test_shortcut_guide_lists_ctrl_h():
+    assert ("Ctrl+H", "Snap overlay home") in shortcuts_guide_lines()
