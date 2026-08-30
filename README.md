@@ -16,6 +16,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Optional smaller next lyric below the active lyric
 - Optional album artwork in Card and Floating modes, with automatic lyric-only fallback
 - Floating artwork can stay visible or appear only when the overlay is hovered
+- Configurable title and artist spacing below the lyric block
 - Custom overlay corner radius from 0 to 40px
 - Track information visibility options: on track change, always, or never
 - Hover controls that respect individual Settings and Hide button preferences
@@ -156,6 +157,7 @@ LYRIC_LINES=single
 TRACK_INFO_MODE=track_change
 SHOW_ALBUM_COVER=false
 FLOATING_COVER_MODE=always
+TRACK_INFO_GAP_PX=4
 OVERLAY_CORNER_RADIUS=30
 SHOW_SETTINGS_BUTTON=true
 SHOW_HIDE_BUTTON=true
@@ -233,6 +235,7 @@ The built-in settings panel supports:
 - Display Style
 - Lyric Lines
 - Track Information
+- Track Info Gap (`0` to `24` px, default `4` px)
 - Lyric Font
 - Font Size
 - Overlay Color
@@ -255,6 +258,7 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 - `Card Default` keeps the original rounded lyric card with one active lyric line.
 - `Floating Minimal` hides the card and track information so only the active lyric remains. A subtle background and the overlay buttons appear on hover.
 - `Floating Context` adds the next lyric below the active lyric in a smaller, dimmer style.
+- `Track Info Gap` controls the space before the title and artist. It updates the overlay preview immediately and remains adaptive when lyrics wrap to two lines.
 - Floating presets always show Settings and Hide controls on hover. `Card Controls on Hover` only changes the behavior of `Card Default`.
 - Changing the detailed display controls to a combination that does not match a built-in preset is shown as `Custom`.
 - Opening Settings always restores the full card temporarily so the controls remain readable.
@@ -266,7 +270,7 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 - Spotify API mode uses the album image URL from Spotify; Non-API mode uses artwork exposed by the Windows media session when available.
 - If artwork is loading, missing, or invalid, Lyricfy automatically keeps the normal lyric-only layout without a placeholder or error.
 - Floating presets can keep artwork `Always Visible` or show it only `On Hover`.
-- When lyrics are unavailable, the artwork is vertically centered beside the song title and artist.
+- Artwork and the lyric block remain vertically centered with each other in every display mode, including wrapped lyrics and `Current + Next`.
 - Artwork keeps its compact rounded corners and disappears without leaving a gap when unavailable.
 
 ### Overlay Corner Radius
@@ -287,12 +291,12 @@ You can also change the mode from the tray menu:
 - `Show Overlay`
 - `Hide Overlay`
 - `Open Settings`
-- `Snap Overlay Home` -> return the overlay to top-center on its current monitor
+- `Snap Home` -> return the overlay to top-center on its current monitor
 - `Mode` -> `Non-API` or `API`
 - `Overlay Controls` -> show or hide the overlay controls and enable `Card Controls on Hover`
 - `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
 - `Display Preset` -> `Card Default`, `Floating Minimal`, or `Floating Context`
-- `Lyricfy v1.4.1`
+- `Lyricfy v1.4.2`
 
 Recommended value:
 
