@@ -241,6 +241,7 @@ class OverlayWindow(QWidget):
         self._track_info_mode = TRACK_CHANGE_INFO_MODE
         self._show_album_cover = False
         self._floating_cover_mode = ALWAYS_FLOATING_COVER_MODE
+        self._track_info_gap_px = 4
         self._album_cover_source: QPixmap | None = None
         self._playback_source = WINDOWS_PLAYBACK_SOURCE
         self._show_settings_button = True
@@ -286,8 +287,8 @@ class OverlayWindow(QWidget):
         card_layout.setContentsMargins(16, 12, 16, 12)
         card_layout.setSpacing(6)
 
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
+        self._header_layout = QHBoxLayout()
+        self._header_layout.setSpacing(8)
 
         self.settings_button = QToolButton()
         self.settings_button.setText("...")
@@ -305,9 +306,9 @@ class OverlayWindow(QWidget):
         self.compact_label.setMinimumWidth(500)
         self.compact_label.setWordWrap(True)
 
-        header_layout.addWidget(self.compact_label, 1)
-        header_layout.addWidget(self.settings_button)
-        header_layout.addWidget(self.close_button)
+        self._header_layout.addWidget(self.compact_label, 1)
+        self._header_layout.addWidget(self.settings_button)
+        self._header_layout.addWidget(self.close_button)
 
         self.track_title_label = QLabel("")
         self.track_title_label.setObjectName("trackMeta")
@@ -369,6 +370,13 @@ class OverlayWindow(QWidget):
         self.floating_cover_mode_input = QComboBox()
         self.floating_cover_mode_input.addItem("Always Visible", ALWAYS_FLOATING_COVER_MODE)
         self.floating_cover_mode_input.addItem("On Hover", HOVER_FLOATING_COVER_MODE)
+        self.track_info_gap_input = QSpinBox()
+        self.track_info_gap_input.setRange(0, 24)
+        self.track_info_gap_input.setSingleStep(1)
+        self.track_info_gap_input.setSuffix(" px")
+        self.track_info_gap_input.setToolTip(
+            "Vertical spacing before the title and artist."
+        )
         self.overlay_corner_radius_input = QSpinBox()
         self.overlay_corner_radius_input.setRange(0, 40)
         self.overlay_corner_radius_input.setSingleStep(1)
@@ -461,6 +469,9 @@ class OverlayWindow(QWidget):
         right_column.addWidget(self._create_field("Display Style", self.display_style_input))
         right_column.addWidget(self._create_field("Lyric Lines", self.lyric_lines_input))
         right_column.addWidget(self._create_field("Track Information", self.track_info_mode_input))
+        right_column.addWidget(
+            self._create_field("Track Info Gap", self.track_info_gap_input)
+        )
         right_column.addWidget(self._create_section_title("Appearance"))
         right_column.addWidget(self._create_field("Overlay Color", self.overlay_color_input))
         right_column.addWidget(self._create_field("Text Color", self.text_color_input))
@@ -503,22 +514,23 @@ class OverlayWindow(QWidget):
         self.album_cover_label.setFixedSize(self._ALBUM_COVER_SIZE, self._ALBUM_COVER_SIZE)
         self.album_cover_label.hide()
         self._compact_text_widget = QWidget()
-        compact_text_layout = QVBoxLayout(self._compact_text_widget)
-        compact_text_layout.setContentsMargins(0, 0, 0, 0)
-        compact_text_layout.setSpacing(6)
-        compact_text_layout.addLayout(header_layout)
+        self._compact_text_layout = QVBoxLayout(self._compact_text_widget)
+        self._compact_text_layout.setContentsMargins(0, 0, 0, 0)
+        self._compact_text_layout.setSpacing(0)
+        self._compact_text_layout.addLayout(self._header_layout)
         self.next_line_label = QLabel("")
         self.next_line_label.setObjectName("nextLyric")
         self.next_line_label.setWordWrap(True)
         self.next_line_label.hide()
-        compact_text_layout.addWidget(self.next_line_label)
-        compact_text_layout.addWidget(self.track_title_label)
-        compact_text_layout.addWidget(self.status_label)
+        self._compact_text_layout.addWidget(self.next_line_label)
+        self._compact_text_layout.addWidget(self.track_title_label)
+        self._compact_text_layout.addWidget(self.status_label)
+        self._sync_compact_text_spacing()
         self._compact_row = QHBoxLayout()
         self._compact_row.setContentsMargins(0, 0, 0, 0)
         self._compact_row.setSpacing(10)
         self._compact_row.addWidget(self.album_cover_label, 0, Qt.AlignmentFlag.AlignVCenter)
-        self._compact_row.addWidget(self._compact_text_widget, 1)
+        self._compact_row.addWidget(self._compact_text_widget, 1, Qt.AlignmentFlag.AlignVCenter)
         card_layout.addLayout(self._compact_row)
         card_layout.addWidget(self.settings_panel)
 
@@ -532,6 +544,7 @@ class OverlayWindow(QWidget):
         self.lyric_lines_input.currentIndexChanged.connect(self._sync_custom_display_preset)
         self.track_info_mode_input.currentIndexChanged.connect(self._sync_custom_display_preset)
         self.hover_buttons_checkbox.toggled.connect(self._preview_card_hover_controls)
+        self.track_info_gap_input.valueChanged.connect(self._preview_track_info_gap)
         self.overlay_corner_radius_input.valueChanged.connect(self._preview_overlay_corner_radius)
 
         self._sync_playback_source_ui()
@@ -721,6 +734,7 @@ class OverlayWindow(QWidget):
         self._display_style = config.display_style or CARD_DISPLAY_STYLE
         self._lyric_lines = config.lyric_lines or SINGLE_LYRIC_LINES
         self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
+        self._track_info_gap_px = max(0, min(24, config.track_info_gap_px))
         self.font_family_input.setCurrentFont(QFont(self._lyric_font_family))
         self.font_size_input.setValue(self._lyric_font_size)
         self._set_alignment_selection(self._text_alignment)
@@ -744,6 +758,7 @@ class OverlayWindow(QWidget):
         self._overlay_corner_radius = max(0, min(40, config.overlay_corner_radius))
         self.show_album_cover_checkbox.setChecked(config.show_album_cover)
         self._set_combo_data(self.floating_cover_mode_input, self._floating_cover_mode)
+        self.track_info_gap_input.setValue(self._track_info_gap_px)
         self.overlay_corner_radius_input.setValue(self._overlay_corner_radius)
         self._show_settings_button = config.show_settings_button
         self._show_hide_button = config.show_hide_button
@@ -786,6 +801,7 @@ class OverlayWindow(QWidget):
             track_info_mode=self.track_info_mode_input.currentData(),
             show_album_cover=self.show_album_cover_checkbox.isChecked(),
             floating_cover_mode=self.floating_cover_mode_input.currentData(),
+            track_info_gap_px=self.track_info_gap_input.value(),
             overlay_corner_radius=self.overlay_corner_radius_input.value(),
             show_settings_button=self._show_settings_button,
             show_hide_button=self._show_hide_button,
@@ -808,7 +824,9 @@ class OverlayWindow(QWidget):
         self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
         self._show_album_cover = config.show_album_cover
         self._floating_cover_mode = config.floating_cover_mode or ALWAYS_FLOATING_COVER_MODE
+        self._track_info_gap_px = max(0, min(24, config.track_info_gap_px))
         self._overlay_corner_radius = max(0, min(40, config.overlay_corner_radius))
+        self._sync_compact_text_spacing()
         self._apply_theme()
         self._sync_album_cover_ui()
 
@@ -884,12 +902,20 @@ class OverlayWindow(QWidget):
         return rounded
 
     def _sync_album_cover_alignment(self) -> None:
-        alignment = (
-            Qt.AlignmentFlag.AlignTop
-            if self._current_line_text
-            else Qt.AlignmentFlag.AlignVCenter
+        self._compact_row.setAlignment(
+            self.album_cover_label,
+            Qt.AlignmentFlag.AlignVCenter,
         )
-        self._compact_row.setAlignment(self.album_cover_label, alignment)
+        self._compact_row.setAlignment(
+            self._compact_text_widget,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
+
+    def _sync_compact_text_spacing(self) -> None:
+        # Margins keep each gap independent so hidden rows leave no empty space.
+        self.next_line_label.setContentsMargins(0, 6, 0, 0)
+        self.track_title_label.setContentsMargins(0, self._track_info_gap_px, 0, 0)
+        self.status_label.setContentsMargins(0, 6, 0, 0)
 
     def playback_source(self) -> str:
         return self._playback_source
@@ -1197,7 +1223,12 @@ class OverlayWindow(QWidget):
         self._refresh_compact_text()
         self._apply_window_mode_if_needed()
 
-    def _refresh_compact_text(self, *, compact_width: int | None = None) -> None:
+    def _refresh_compact_text(
+        self,
+        *,
+        compact_width: int | None = None,
+        text_width: int | None = None,
+    ) -> None:
         title_text = self._track_text.strip()
         artist_text = self._artist_text.strip()
         if self._current_line_text:
@@ -1220,7 +1251,11 @@ class OverlayWindow(QWidget):
             show_small_track = bool(header_text)
 
         self.track_title_label.setText(
-            self._elide_label_text(self.track_title_label, header_text, available_width=compact_width)
+            self._elide_label_text(
+                self.track_title_label,
+                header_text,
+                available_width=text_width or compact_width,
+            )
         )
         self.track_title_label.setVisible(show_small_track)
         self.compact_label.setText(self._format_compact_text(compact_text, available_width=compact_width))
@@ -1231,7 +1266,10 @@ class OverlayWindow(QWidget):
             and bool(self._next_line_text)
         )
         self.next_line_label.setText(
-            self._format_next_line_text(self._next_line_text, available_width=compact_width)
+            self._format_next_line_text(
+                self._next_line_text,
+                available_width=text_width or compact_width,
+            )
         )
         self.next_line_label.setVisible(show_next)
         self._sync_album_cover_alignment()
@@ -1363,6 +1401,12 @@ class OverlayWindow(QWidget):
         self._overlay_corner_radius = max(0, min(40, radius))
         self.update()
 
+    def _preview_track_info_gap(self, gap_px: int) -> None:
+        self._track_info_gap_px = max(0, min(24, gap_px))
+        self._sync_compact_text_spacing()
+        self._last_window_size = None
+        self._refresh_layout_after_settings_change()
+
     def _set_startup_visibility_selection(self, start_hidden: bool) -> None:
         for index in range(self.startup_visibility_input.count()):
             if bool(self.startup_visibility_input.itemData(index)) == start_hidden:
@@ -1428,16 +1472,33 @@ class OverlayWindow(QWidget):
             return
         self._apply_window_mode()
 
-    def _compact_text_width_for_window(self, target_width: int) -> int:
+    def _compact_layout_widths(self, target_width: int) -> tuple[int, int]:
         outer_layout = self.layout()
-        outer_margins = outer_layout.contentsMargins() if outer_layout is not None else self.contentsMargins()
+        outer_margins = (
+            outer_layout.contentsMargins()
+            if outer_layout is not None
+            else self.contentsMargins()
+        )
         card_widget = self.findChild(QWidget, "card")
         card_layout = card_widget.layout() if card_widget is not None else None
         card_margins = card_layout.contentsMargins() if card_layout is not None else outer_margins
         content_width = max(320, target_width - outer_margins.left() - outer_margins.right())
         card_width = max(280, content_width - card_margins.left() - card_margins.right())
-        button_width = 64 if not self._expanded else 0
-        return max(180, card_width - button_width)
+        cover_width = self._ALBUM_COVER_SIZE + self._compact_row.spacing()
+        if self.album_cover_label.isHidden():
+            cover_width = 0
+        text_width = max(180, card_width - cover_width)
+        visible_buttons = [
+            button for button in (self.settings_button, self.close_button) if not button.isHidden()
+        ]
+        buttons_width = sum(button.sizeHint().width() for button in visible_buttons)
+        header_spacing = self._header_layout.spacing() * len(visible_buttons)
+        lyric_width = max(180, text_width - buttons_width - header_spacing)
+        return lyric_width, text_width
+
+    def _compact_text_width_for_window(self, target_width: int) -> int:
+        lyric_width, _ = self._compact_layout_widths(target_width)
+        return lyric_width
 
     def _schedule_transient_refresh(self) -> None:
         deadlines = []
@@ -1477,7 +1538,8 @@ class OverlayWindow(QWidget):
         if self._expanded:
             target_height = self._expanded_target_height(target_width)
         else:
-            self._refresh_compact_text(compact_width=self._compact_text_width_for_window(target_width))
+            lyric_width, text_width = self._compact_layout_widths(target_width)
+            self._refresh_compact_text(compact_width=lyric_width, text_width=text_width)
             target_height = self._compact_target_height(target_width)
         target_size = (target_width, target_height)
         self.setMinimumSize(target_width, self._COMPACT_MIN_HEIGHT)
@@ -1550,34 +1612,17 @@ class OverlayWindow(QWidget):
         card_widget = self.findChild(QWidget, "card")
         card_layout = card_widget.layout() if card_widget is not None else None
         card_margins = card_layout.contentsMargins() if card_layout is not None else outer_margins
-        spacing = card_layout.spacing() if card_layout is not None else 0
+        _, text_width = self._compact_layout_widths(target_width)
+        self._compact_text_layout.invalidate()
+        text_height = self._compact_text_layout.heightForWidth(text_width)
+        if text_height <= 0:
+            text_height = self._compact_text_layout.sizeHint().height()
 
-        content_width = max(320, target_width - outer_margins.left() - outer_margins.right())
-        card_width = max(280, content_width - card_margins.left() - card_margins.right())
-        cover_width = self._ALBUM_COVER_SIZE + 10 if self.album_cover_label.isVisible() else 0
-        compact_width = max(180, card_width - 64 - cover_width)
-
-        compact_height = self.compact_label.heightForWidth(compact_width)
-        if compact_height <= 0:
-            compact_height = self.compact_label.sizeHint().height()
-
-        total = outer_height + card_margins.top() + card_margins.bottom() + compact_height
-
-        visible_extra_heights = []
-        if self.track_title_label.isVisible():
-            visible_extra_heights.append(self.track_title_label.sizeHint().height())
-        if self.status_label.isVisible():
-            visible_extra_heights.append(self.status_label.sizeHint().height())
-        if self.next_line_label.isVisible():
-            visible_extra_heights.append(self.next_line_label.sizeHint().height())
-
-        if visible_extra_heights:
-            total += spacing * len(visible_extra_heights) + sum(visible_extra_heights)
-
-        if self.album_cover_label.isVisible():
-            cover_height = self._ALBUM_COVER_SIZE + card_margins.top() + card_margins.bottom()
-            total = max(total, outer_height + cover_height)
-
+        row_height = max(
+            text_height,
+            self._ALBUM_COVER_SIZE if not self.album_cover_label.isHidden() else 0,
+        )
+        total = outer_height + card_margins.top() + card_margins.bottom() + row_height
         return max(self._COMPACT_MIN_HEIGHT, total)
 
     def _position_top_center(self) -> None:

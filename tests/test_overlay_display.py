@@ -204,6 +204,14 @@ def test_corner_radius_preview_updates_state():
     assert overlay._overlay_corner_radius == 0
 
 
+def test_track_info_gap_preview_updates_spacing_and_layout():
+    overlay = _overlay()
+    overlay.track_info_gap_input.setValue(12)
+    assert overlay._track_info_gap_px == 12
+    assert overlay.track_title_label.contentsMargins().top() == 12
+    assert overlay._last_window_size is not None
+
+
 def test_cover_is_centered_when_lyrics_are_unavailable():
     overlay = _overlay()
     overlay._current_line_text = ""
@@ -212,12 +220,39 @@ def test_cover_is_centered_when_lyrics_are_unavailable():
     assert alignment & Qt.AlignmentFlag.AlignVCenter
 
 
-def test_cover_is_top_aligned_when_current_lyric_is_visible():
+def test_cover_is_centered_when_current_lyric_is_visible():
     overlay = _overlay()
     overlay._current_line_text = "Current lyric"
     overlay._sync_album_cover_alignment()
     alignment = overlay._compact_row.itemAt(0).alignment()
-    assert alignment & Qt.AlignmentFlag.AlignTop
+    assert alignment & Qt.AlignmentFlag.AlignVCenter
+
+
+def test_compact_width_accounts_for_visible_cover_and_controls():
+    overlay = _overlay()
+    overlay._show_album_cover = True
+    overlay.set_album_cover(_image_bytes())
+    overlay.set_overlay_buttons_visibility(False, False)
+    lyric_width, text_width = overlay._compact_layout_widths(overlay._COMPACT_WINDOW_WIDTH)
+    assert text_width - lyric_width == 0
+
+    overlay.set_overlay_buttons_visibility(True, True)
+    lyric_width, text_width = overlay._compact_layout_widths(overlay._COMPACT_WINDOW_WIDTH)
+    assert lyric_width < text_width
+
+
+def test_wrapped_lyrics_and_cover_share_center_alignment():
+    overlay = _overlay()
+    overlay._show_album_cover = True
+    overlay.set_album_cover(_image_bytes())
+    overlay._lyrics_available = True
+    overlay.set_lines("A lyric line long enough to wrap over two display lines", "Next lyric")
+    overlay._apply_window_mode()
+    cover_alignment = overlay._compact_row.itemAt(0).alignment()
+    text_alignment = overlay._compact_row.itemAt(1).alignment()
+    assert cover_alignment & Qt.AlignmentFlag.AlignVCenter
+    assert text_alignment & Qt.AlignmentFlag.AlignVCenter
+    assert overlay.height() >= overlay._COMPACT_MIN_HEIGHT
 
 
 def test_invalid_or_missing_cover_collapses_layout():

@@ -56,6 +56,7 @@ class TestDefaultConfig:
         assert cfg.text_alignment == "left"
         assert cfg.show_album_cover is False
         assert cfg.floating_cover_mode == ALWAYS_FLOATING_COVER_MODE
+        assert cfg.track_info_gap_px == 4
         assert cfg.overlay_corner_radius == 30
         assert display_preset_for(cfg) == CARD_DEFAULT_PRESET
 
@@ -106,6 +107,7 @@ class TestSaveLoadRoundTrip:
         original.track_info_mode = "always"
         original.show_album_cover = True
         original.floating_cover_mode = "hover"
+        original.track_info_gap_px = 12
         original.overlay_corner_radius = 12
 
         config_module.save_config(original)
@@ -123,6 +125,7 @@ class TestSaveLoadRoundTrip:
         assert loaded.track_info_mode == "always"
         assert loaded.show_album_cover is True
         assert loaded.floating_cover_mode == "hover"
+        assert loaded.track_info_gap_px == 12
         assert loaded.overlay_corner_radius == 12
 
     def test_corner_radius_is_clamped(self, tmp_path, monkeypatch):
@@ -131,3 +134,10 @@ class TestSaveLoadRoundTrip:
         monkeypatch.setattr(config_module, "FALLBACK_ENV_FILE", tmp_path / "missing.env")
         env_file.write_text("OVERLAY_CORNER_RADIUS=99\n", encoding="utf-8")
         assert config_module.load_config().overlay_corner_radius == 40
+
+    def test_track_info_gap_is_clamped(self, tmp_path, monkeypatch):
+        env_file = tmp_path / ".env"
+        monkeypatch.setattr(config_module, "ENV_FILE", env_file)
+        monkeypatch.setattr(config_module, "FALLBACK_ENV_FILE", tmp_path / "missing.env")
+        env_file.write_text("TRACK_INFO_GAP_PX=99\n", encoding="utf-8")
+        assert config_module.load_config().track_info_gap_px == 24

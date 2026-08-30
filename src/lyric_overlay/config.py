@@ -107,6 +107,7 @@ class AppConfig:
     track_info_mode: str = TRACK_CHANGE_INFO_MODE
     show_album_cover: bool = False
     floating_cover_mode: str = ALWAYS_FLOATING_COVER_MODE
+    track_info_gap_px: int = 4
     overlay_corner_radius: int = 30
     show_settings_button: bool = True
     show_hide_button: bool = True
@@ -139,6 +140,7 @@ def default_config() -> AppConfig:
         track_info_mode=TRACK_CHANGE_INFO_MODE,
         show_album_cover=False,
         floating_cover_mode=ALWAYS_FLOATING_COVER_MODE,
+        track_info_gap_px=4,
         overlay_corner_radius=30,
         show_settings_button=True,
         show_hide_button=True,
@@ -187,6 +189,12 @@ def load_config() -> AppConfig:
         show_album_cover=os.getenv("SHOW_ALBUM_COVER", "false").lower() == "true",
         floating_cover_mode=_normalize_floating_cover_mode(
             os.getenv("FLOATING_COVER_MODE", ALWAYS_FLOATING_COVER_MODE)
+        ),
+        track_info_gap_px=_parse_int(
+            os.getenv("TRACK_INFO_GAP_PX"),
+            default=4,
+            minimum=0,
+            maximum=24,
         ),
         overlay_corner_radius=_parse_int(os.getenv("OVERLAY_CORNER_RADIUS"), default=30, minimum=0, maximum=40),
         show_settings_button=os.getenv("SHOW_SETTINGS_BUTTON", "true").lower() == "true",
@@ -309,6 +317,7 @@ def save_config(config: AppConfig) -> None:
         f"TRACK_INFO_MODE={_normalize_track_info_mode(config.track_info_mode)}",
         f"SHOW_ALBUM_COVER={'true' if config.show_album_cover else 'false'}",
         f"FLOATING_COVER_MODE={_normalize_floating_cover_mode(config.floating_cover_mode)}",
+        f"TRACK_INFO_GAP_PX={max(0, min(24, config.track_info_gap_px))}",
         f"OVERLAY_CORNER_RADIUS={max(0, min(40, config.overlay_corner_radius))}",
         f"SHOW_SETTINGS_BUTTON={'true' if config.show_settings_button else 'false'}",
         f"SHOW_HIDE_BUTTON={'true' if config.show_hide_button else 'false'}",

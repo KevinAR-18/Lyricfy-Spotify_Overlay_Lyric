@@ -161,6 +161,7 @@ def main() -> int:
             track_info_mode=updates.track_info_mode,
             show_album_cover=updates.show_album_cover,
             floating_cover_mode=updates.floating_cover_mode,
+            track_info_gap_px=updates.track_info_gap_px,
             overlay_corner_radius=updates.overlay_corner_radius,
             show_settings_button=updates.show_settings_button,
             show_hide_button=updates.show_hide_button,
@@ -218,8 +219,7 @@ def main() -> int:
         show_action = QAction("Show Overlay", tray_menu)
         hide_action = QAction("Hide Overlay", tray_menu)
         settings_action = QAction("Open Settings", tray_menu)
-        snap_home_action = QAction("Snap Overlay Home", tray_menu)
-        snap_home_action.setShortcut("Shift+H")
+        snap_home_action = QAction("Snap Home", tray_menu)
         mode_menu = QMenu("Mode", tray_menu)
         overlay_buttons_menu = QMenu("Overlay Controls", tray_menu)
         startup_menu = QMenu("Startup", tray_menu)
