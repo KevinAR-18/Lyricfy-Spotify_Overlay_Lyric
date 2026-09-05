@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import sys
+import logging
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QtMsgType, qInstallMessageHandler
+from PySide6.QtCore import QLockFile, QTimer, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QAction, QActionGroup, QIcon
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
@@ -24,8 +25,13 @@ if __package__ in (None, ""):
         FLOATING_MINIMAL_PRESET,
         AppConfig,
         ICON_FILE,
+        TRAY_ICON_FILE,
+        APP_DATA_DIR,
+        reload_shortcut_label,
+        _normalize_playback_source,
+        default_config,
         SPOTIFY_API_PLAYBACK_SOURCE,
-        WINDOWS_PLAYBACK_SOURCE,
+        LOCAL_PLAYBACK_SOURCE,
         ensure_directories,
         ensure_env_file,
         load_config,
@@ -33,6 +39,8 @@ if __package__ in (None, ""):
         display_preset_for,
         display_preset_values,
     )
+    from lyric_overlay.platform import get_autostart_status, set_autostart
+    from lyric_overlay.diagnostics import configure_logging
     from lyric_overlay.lyrics import LyricsRepository
     from lyric_overlay.overlay import OverlayWindow, create_application
     from lyric_overlay.spotify_client import PlaybackClient, create_playback_client
@@ -47,8 +55,13 @@ else:
         FLOATING_MINIMAL_PRESET,
         AppConfig,
         ICON_FILE,
+        TRAY_ICON_FILE,
+        APP_DATA_DIR,
+        reload_shortcut_label,
+        _normalize_playback_source,
+        default_config,
         SPOTIFY_API_PLAYBACK_SOURCE,
-        WINDOWS_PLAYBACK_SOURCE,
+        LOCAL_PLAYBACK_SOURCE,
         ensure_directories,
         ensure_env_file,
         load_config,
@@ -56,6 +69,8 @@ else:
         display_preset_for,
         display_preset_values,
     )
+    from .platform import get_autostart_status, set_autostart
+    from .diagnostics import configure_logging
     from .lyrics import LyricsRepository
     from .overlay import OverlayWindow, create_application
     from .spotify_client import PlaybackClient, create_playback_client
@@ -80,57 +95,95 @@ def qt_message_handler(mode, context, message) -> None:
     del context
     if mode == QtMsgType.QtWarningMsg and "QWindowsWindow::setGeometry" in message:
         return
-    print(message, flush=True)
+    if sys.platform == "darwin":
+        logging.getLogger("lyric_overlay").warning("Qt: %s", message[:1024])
+    elif sys.stdout is not None:
+        print(message, flush=True)
 
 
 def playback_startup_lines(playback_source: str, error_message: str | None = None) -> tuple[str, str]:
     if playback_source == SPOTIFY_API_PLAYBACK_SOURCE:
         return (
             "Open Settings and fill Spotify API credentials",
-            error_message or "Then press Ctrl+R to retry",
+            error_message or f"Then press {reload_shortcut_label()} to retry",
         )
     return (
         "Open Spotify desktop and start playback",
-        error_message or "Then press Ctrl+R to retry",
+        error_message or f"Then press {reload_shortcut_label()} to retry",
     )
 
 
-def set_windows_autostart(enabled: bool, start_hidden: bool) -> None:
+def persist_settings(previous: AppConfig, updated: AppConfig) -> tuple[AppConfig, str]:
+    """Apply login changes and save other settings even when registration fails."""
+    changed = previous.autostart_enabled != updated.autostart_enabled or (
+        updated.autostart_enabled and previous.autostart_start_hidden != updated.autostart_start_hidden
+    )
+    message = ""
+    applied = False
+    if changed:
+        result = set_autostart(updated.autostart_enabled, updated.autostart_start_hidden)
+        message = result.message
+        applied = result.success
+        if not result.success:
+            updated = replace(updated, autostart_enabled=previous.autostart_enabled,
+                              autostart_start_hidden=previous.autostart_start_hidden)
     try:
-        import winreg
-    except ImportError:
-        return
-
-    if getattr(sys, "frozen", False):
-        command = f'"{sys.executable}"'
-    else:
-        command = f'"{sys.executable}" "{Path(sys.argv[0]).resolve()}"'
-    if start_hidden:
-        command = f"{command} {START_HIDDEN_ARG}"
-
-    run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_SET_VALUE) as key:
-            if enabled:
-                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, command)
-            else:
-                try:
-                    winreg.DeleteValue(key, APP_NAME)
-                except FileNotFoundError:
-                    pass
+        save_config(updated)
     except OSError:
-        pass
+        if applied:
+            rollback = set_autostart(previous.autostart_enabled, previous.autostart_start_hidden)
+            if not rollback.success:
+                return previous, "Settings could not be saved; login startup also needs repair in System Settings."
+        return previous, "Settings could not be saved. Check the application data folder permissions."
+    return updated, message
+
+
+def smoke_test() -> int:
+    """Exercise the packaged Qt/resources without user data, login writes, or Spotify."""
+    from PySide6.QtGui import QPixmap
+    app = create_application()
+    overlay = OverlayWindow()
+    if not ICON_FILE.exists() or QPixmap(str(ICON_FILE)).isNull():
+        return 2
+    if sys.platform == "darwin":
+        from lyric_overlay.platform.playback_macos import SCRIPT_FILE
+        if not SCRIPT_FILE.is_file():
+            return 3
+        if QIcon(str(TRAY_ICON_FILE)).pixmap(22, 22).isNull():
+            return 4
+    overlay.load_config_values(default_config())
+    overlay.show()
+    QTimer.singleShot(200, app.quit)
+    result = app.exec()
+    overlay.allow_exit()
+    overlay.close()
+    return result
 
 
 def main() -> int:
+    if "--smoke-test" in sys.argv:
+        return smoke_test()
+    configure_logging()
     qInstallMessageHandler(qt_message_handler)
     ensure_directories()
     ensure_env_file()
     config = load_config()
-    set_windows_autostart(config.autostart_enabled, config.autostart_start_hidden)
+    startup_message = ""
+    if sys.platform == "win32":
+        startup_message = set_autostart(config.autostart_enabled, config.autostart_start_hidden).message
+    startup_status = get_autostart_status()
+    if sys.platform == "darwin":
+        config = replace(config, autostart_enabled=startup_status.registered)
+        startup_message = startup_status.message
 
     app = create_application()
     app.setApplicationName(APP_NAME)
+    instance_lock = None
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        instance_lock = QLockFile(str(APP_DATA_DIR / "instance.lock"))
+        instance_lock.setStaleLockTime(0)
+        if not instance_lock.tryLock(0):
+            return 0 if instance_lock.error() == QLockFile.LockError.LockFailedError else 1
     icon_path = ICON_FILE
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
@@ -138,6 +191,8 @@ def main() -> int:
     if icon_path.exists():
         overlay.setWindowIcon(QIcon(str(icon_path)))
     overlay.load_config_values(config)
+    overlay.autostart_checkbox.setEnabled(startup_status.supported)
+    overlay.autostart_checkbox.setToolTip(startup_message)
 
     def merge_config(base_config: AppConfig, updates: AppConfig) -> AppConfig:
         return replace(
@@ -170,7 +225,7 @@ def main() -> int:
             autostart_start_hidden=updates.autostart_start_hidden,
         )
 
-    mode_windows_action = None
+    mode_local_action = None
     mode_api_action = None
     show_settings_button_action = None
     show_hide_button_action = None
@@ -181,9 +236,9 @@ def main() -> int:
     display_preset_actions: dict[str, QAction] = {}
 
     def sync_mode_actions(playback_source: str) -> None:
-        normalized = playback_source or WINDOWS_PLAYBACK_SOURCE
-        if mode_windows_action is not None:
-            mode_windows_action.setChecked(normalized == WINDOWS_PLAYBACK_SOURCE)
+        normalized = _normalize_playback_source(playback_source)
+        if mode_local_action is not None:
+            mode_local_action.setChecked(normalized == LOCAL_PLAYBACK_SOURCE)
         if mode_api_action is not None:
             mode_api_action.setChecked(normalized == SPOTIFY_API_PLAYBACK_SOURCE)
 
@@ -211,8 +266,10 @@ def main() -> int:
     tray_icon = None
     if QSystemTrayIcon.isSystemTrayAvailable():
         tray_icon = QSystemTrayIcon(app)
-        if icon_path.exists():
-            tray_icon.setIcon(QIcon(str(icon_path)))
+        menu_icon = QIcon(str(TRAY_ICON_FILE))
+        if sys.platform == "darwin":
+            menu_icon.setIsMask(True)
+        tray_icon.setIcon(menu_icon)
         tray_icon.setToolTip("Lyricfy")
 
         tray_menu = QMenu()
@@ -242,11 +299,11 @@ def main() -> int:
                 action.setEnabled(False)
             display_preset_actions[preset] = action
             display_preset_menu.addAction(action)
-        mode_windows_action = QAction("Non-API", mode_group)
-        mode_windows_action.setCheckable(True)
+        mode_local_action = QAction("Non-API", mode_group)
+        mode_local_action.setCheckable(True)
         mode_api_action = QAction("API", mode_group)
         mode_api_action.setCheckable(True)
-        mode_menu.addAction(mode_windows_action)
+        mode_menu.addAction(mode_local_action)
         mode_menu.addAction(mode_api_action)
         show_settings_button_action = QAction("Show Settings Button", overlay_buttons_menu)
         show_settings_button_action.setCheckable(True)
@@ -260,6 +317,8 @@ def main() -> int:
         overlay_buttons_menu.addAction(hover_buttons_action)
         autostart_action = QAction("Auto Start", startup_menu)
         autostart_action.setCheckable(True)
+        autostart_action.setEnabled(startup_status.supported)
+        autostart_action.setToolTip(startup_message)
         autostart_show_action = QAction("Show Overlay", startup_group)
         autostart_show_action.setCheckable(True)
         autostart_hidden_action = QAction("Start Hidden", startup_group)
@@ -270,7 +329,7 @@ def main() -> int:
         startup_menu.addAction(autostart_hidden_action)
         signature_action = QAction(f"Lyricfy v{__version__}", tray_menu)
         signature_action.setEnabled(False)
-        exit_action = QAction("Exit", tray_menu)
+        exit_action = QAction("Quit" if sys.platform == "darwin" else "Exit", tray_menu)
         tray_menu.addAction(show_action)
         tray_menu.addAction(hide_action)
         tray_menu.addAction(settings_action)
@@ -376,11 +435,9 @@ def main() -> int:
                     else autostart_start_hidden
                 ),
             )
-            save_config(updated_config)
-            set_windows_autostart(
-                updated_config.autostart_enabled,
-                updated_config.autostart_start_hidden,
-            )
+            updated_config, message = persist_settings(controller.config, updated_config)
+            overlay.show_status(message or "Startup settings saved")
+            overlay.autostart_checkbox.setToolTip(message)
             overlay.load_config_values(updated_config)
             controller.config = updated_config
             sync_startup_actions(updated_config)
@@ -396,8 +453,8 @@ def main() -> int:
         hide_action.triggered.connect(hide_overlay)
         settings_action.triggered.connect(open_settings)
         snap_home_action.triggered.connect(overlay.snap_to_home)
-        mode_windows_action.triggered.connect(
-            lambda checked: apply_playback_source(WINDOWS_PLAYBACK_SOURCE) if checked else None
+        mode_local_action.triggered.connect(
+            lambda checked: apply_playback_source(LOCAL_PLAYBACK_SOURCE) if checked else None
         )
         mode_api_action.triggered.connect(
             lambda checked: apply_playback_source(SPOTIFY_API_PLAYBACK_SOURCE) if checked else None
@@ -451,11 +508,11 @@ def main() -> int:
     def save_settings(new_config: AppConfig) -> None:
         current_config = controller.config
         saved_config = merge_config(current_config, new_config)
-        save_config(saved_config)
-        set_windows_autostart(saved_config.autostart_enabled, saved_config.autostart_start_hidden)
+        saved_config, message = persist_settings(current_config, saved_config)
         overlay.load_config_values(saved_config)
         overlay.apply_config_theme(saved_config)
-        overlay.show_status("Settings saved to .env")
+        overlay.show_status(message or "Settings saved to .env")
+        overlay.autostart_checkbox.setToolTip(message or startup_message)
         controller.config = saved_config
         controller.lyrics_repository.set_auto_save_fetched_lrc(saved_config.auto_save_fetched_lrc)
         controller.refresh_album_cover()
@@ -487,6 +544,8 @@ def main() -> int:
         overlay.show_status(f"Cleared {removed} downloaded lyric {suffix}")
 
     def reconnect_spotify() -> None:
+        nonlocal initialized
+        initialized = True
         latest = load_config()
         overlay.load_config_values(latest)
         sync_mode_actions(latest.playback_source)
@@ -507,10 +566,15 @@ def main() -> int:
     overlay.lyric_color_toggle_requested.connect(toggle_lyric_color)
     overlay.clear_lyrics_cache_requested.connect(clear_downloaded_lyrics)
     overlay.overlay_hidden.connect(controller.pause_polling)
-    overlay.overlay_shown.connect(controller.resume_polling)
     app.aboutToQuit.connect(controller.stop)
 
+    initialized = False
+
     def initialize_spotify() -> None:
+        nonlocal initialized
+        if not overlay.isVisible():
+            return
+        initialized = True
         latest = load_config()
         playback_client, error_message = build_playback_client(latest)
         if playback_client is None:
@@ -520,6 +584,14 @@ def main() -> int:
             return
         controller.reconnect(playback_client, latest)
 
+    def resume_visible_playback() -> None:
+        if initialized:
+            controller.resume_polling()
+        else:
+            initialize_spotify()
+
+    overlay.overlay_shown.connect(resume_visible_playback)
+    overlay.set_tray_available(tray_icon is not None)
     overlay.set_track(None)
     overlay.set_lines("Starting Lyricfy...", "Connecting to Spotify playback")
     overlay.show_status("Connecting to Spotify playback...")

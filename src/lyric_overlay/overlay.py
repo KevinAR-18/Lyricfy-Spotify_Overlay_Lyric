@@ -4,7 +4,7 @@ import sys
 import time
 
 from PySide6.QtCore import QObject, QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -37,7 +37,10 @@ from .config import (
     SPOTIFY_API_PLAYBACK_SOURCE,
     TRACK_CHANGE_INFO_MODE,
     AppConfig,
-    WINDOWS_PLAYBACK_SOURCE,
+    LOCAL_PLAYBACK_SOURCE,
+    DEFAULT_FONT_FAMILY,
+    reload_shortcut_label,
+    _normalize_playback_source,
     default_config,
     display_preset_for,
     display_preset_values,
@@ -45,9 +48,27 @@ from .config import (
 from .models import TrackInfo
 
 
+def resolved_font_family(requested: str) -> str:
+    if not requested or requested == "system":
+        return "Segoe UI" if sys.platform == "win32" else QApplication.font().family()
+    if sys.platform == "darwin" and requested not in QFontDatabase.families():
+        return QApplication.font().family()
+    return requested
+
+
+def ui_font(size: int, semibold: bool = False) -> QFont:
+    if sys.platform == "win32":
+        return QFont("Segoe UI Semibold" if semibold else "Segoe UI", size)
+    font = QFont(QApplication.font())
+    font.setPointSize(size)
+    if semibold:
+        font.setWeight(QFont.Weight.DemiBold)
+    return font
+
+
 def shortcuts_guide_lines() -> list[tuple[str, str]]:
     return [
-        ("Ctrl+R", "Reload playback"),
+        (reload_shortcut_label(), "Reload playback"),
         ("Shift+H", "Snap overlay home"),
         ("Shift+C", "Toggle lyric color"),
         ("Shift+S", "Open or close settings"),
@@ -218,6 +239,7 @@ class OverlayWindow(QWidget):
         self._user_positioned = False
         self._allow_exit = False
         self._hide_requested = False
+        self._tray_available = True
         self._track_text = "Spotify is not playing"
         self._artist_text = ""
         self._current_line_text = ""
@@ -233,7 +255,7 @@ class OverlayWindow(QWidget):
         self._lyric_glow_color = "#66CCFFFF"
         self._lyric_toggle_color = "#1A1A1A"
         self._last_non_toggle_lyric_color = self._lyric_text_color
-        self._lyric_font_family = "Segoe UI"
+        self._lyric_font_family = resolved_font_family(DEFAULT_FONT_FAMILY)
         self._lyric_font_size = 11
         self._text_alignment = "left"
         self._display_style = CARD_DISPLAY_STYLE
@@ -243,7 +265,7 @@ class OverlayWindow(QWidget):
         self._floating_cover_mode = ALWAYS_FLOATING_COVER_MODE
         self._track_info_gap_px = 4
         self._album_cover_source: QPixmap | None = None
-        self._playback_source = WINDOWS_PLAYBACK_SOURCE
+        self._playback_source = LOCAL_PLAYBACK_SOURCE
         self._show_settings_button = True
         self._show_hide_button = True
         self._hover_buttons_enabled = False
@@ -301,7 +323,7 @@ class OverlayWindow(QWidget):
         self.close_button.clicked.connect(self.request_close)
 
         self.compact_label = QLabel("Spotify is not playing")
-        self.compact_label.setFont(QFont("Segoe UI Semibold", 11))
+        self.compact_label.setFont(ui_font(11, semibold=True))
         self.compact_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.compact_label.setMinimumWidth(500)
         self.compact_label.setWordWrap(True)
@@ -312,12 +334,12 @@ class OverlayWindow(QWidget):
 
         self.track_title_label = QLabel("")
         self.track_title_label.setObjectName("trackMeta")
-        self.track_title_label.setFont(QFont("Segoe UI", 8))
+        self.track_title_label.setFont(ui_font(8))
         self.track_title_label.setWordWrap(False)
         self.track_title_label.hide()
 
         self.status_label = QLabel("")
-        self.status_label.setFont(QFont("Segoe UI", 9))
+        self.status_label.setFont(ui_font(9))
         self.status_label.setWordWrap(True)
         self.status_label.hide()
 
@@ -388,7 +410,7 @@ class OverlayWindow(QWidget):
         self.hover_buttons_checkbox.setToolTip(
             "Floating presets always show Settings and Hide controls on hover."
         )
-        self.autostart_checkbox = QCheckBox("Auto start when Windows starts")
+        self.autostart_checkbox = QCheckBox("Auto start on login")
         self.shortcuts_label = QLabel(shortcuts_guide_text())
         self.shortcuts_label.setObjectName("shortcutsGuide")
         self.shortcuts_label.setWordWrap(True)
@@ -577,7 +599,7 @@ class OverlayWindow(QWidget):
             }}
             QLabel#sectionTitle {{
                 color: {self._overlay_text_color};
-                font: 9pt "Segoe UI Semibold";
+                font: 9pt "{ui_font(9, semibold=True).family()}";
                 letter-spacing: 0.5px;
                 padding-bottom: 2px;
             }}
@@ -587,7 +609,7 @@ class OverlayWindow(QWidget):
                 border: 1px solid rgba(255, 255, 255, 18);
                 border-radius: 12px;
                 padding: 8px 10px;
-                font: 9pt "Segoe UI";
+                font: 9pt "{ui_font(9).family()}";
             }}
             QLineEdit {{
                 background: rgba(255, 255, 255, 20);
@@ -644,7 +666,7 @@ class OverlayWindow(QWidget):
                 min-height: 24px;
                 max-height: 24px;
                 padding: 0px;
-                font: 9pt "Segoe UI Semibold";
+                font: 9pt "{ui_font(9, semibold=True).family()}";
             }}
             """
         )
@@ -674,7 +696,7 @@ class OverlayWindow(QWidget):
         layout.setSpacing(4)
 
         label = QLabel(label_text)
-        label.setFont(QFont("Segoe UI Semibold", 9))
+        label.setFont(ui_font(9, semibold=True))
         layout.addWidget(label)
         layout.addWidget(input_widget)
         return container
@@ -691,7 +713,7 @@ class OverlayWindow(QWidget):
         layout.setSpacing(4)
 
         label = QLabel("Lyric Offset (ms)")
-        label.setFont(QFont("Segoe UI Semibold", 9))
+        label.setFont(ui_font(9, semibold=True))
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -723,12 +745,12 @@ class OverlayWindow(QWidget):
         self.lyric_offset_input.setText(str(current_value + delta_ms))
 
     def load_config_values(self, config: AppConfig) -> None:
-        self._playback_source = config.playback_source or WINDOWS_PLAYBACK_SOURCE
+        self._playback_source = _normalize_playback_source(config.playback_source)
         self.client_id_input.setText(config.spotify_client_id)
         self.client_secret_input.setText(config.spotify_client_secret)
         self.redirect_uri_input.setText(config.spotify_redirect_uri)
         self.lyric_offset_input.setText(str(config.lyric_offset_ms or 0))
-        self._lyric_font_family = config.lyric_font_family or "Segoe UI"
+        self._lyric_font_family = resolved_font_family(config.lyric_font_family)
         self._lyric_font_size = max(8, config.lyric_font_size or 11)
         self._text_alignment = config.text_alignment or "left"
         self._display_style = config.display_style or CARD_DISPLAY_STYLE
@@ -793,7 +815,7 @@ class OverlayWindow(QWidget):
             lyric_text_color=self.lyric_color_input.text().strip() or "#F4F4F4",
             lyric_glow_color=self.glow_color_input.text().strip() or "#66CCFFFF",
             lyric_toggle_color=self.toggle_color_input.text().strip() or "#1A1A1A",
-            lyric_font_family=self.font_family_input.currentFont().family().strip() or "Segoe UI",
+            lyric_font_family=self.font_family_input.currentFont().family().strip() or DEFAULT_FONT_FAMILY,
             lyric_font_size=self.font_size_input.value(),
             text_alignment=self.text_alignment_input.currentData(),
             display_style=self.display_style_input.currentData(),
@@ -816,7 +838,7 @@ class OverlayWindow(QWidget):
         self._lyric_text_color = config.lyric_text_color or "#F4F4F4"
         self._lyric_glow_color = config.lyric_glow_color or "#66CCFFFF"
         self._lyric_toggle_color = config.lyric_toggle_color or "#1A1A1A"
-        self._lyric_font_family = config.lyric_font_family or "Segoe UI"
+        self._lyric_font_family = resolved_font_family(config.lyric_font_family)
         self._lyric_font_size = max(8, config.lyric_font_size or 11)
         self._text_alignment = config.text_alignment or "left"
         self._display_style = config.display_style or CARD_DISPLAY_STYLE
@@ -831,7 +853,7 @@ class OverlayWindow(QWidget):
         self._sync_album_cover_ui()
 
     def set_playback_source(self, playback_source: str) -> None:
-        self._playback_source = playback_source or WINDOWS_PLAYBACK_SOURCE
+        self._playback_source = _normalize_playback_source(playback_source)
         self._sync_playback_source_ui()
         self._refresh_layout_after_settings_change()
 
@@ -1093,11 +1115,11 @@ class OverlayWindow(QWidget):
                 background: transparent;
             }}
             QLabel#confirmTitle {{
-                font: 11pt "Segoe UI Semibold";
+                font: 11pt "{ui_font(11, semibold=True).family()}";
             }}
             QLabel#confirmMessage {{
                 color: rgba(244, 244, 244, 204);
-                font: 9pt "Segoe UI";
+                font: 9pt "{ui_font(9).family()}";
                 line-height: 130%;
             }}
             QPushButton {{
@@ -1735,14 +1757,14 @@ class OverlayWindow(QWidget):
 
     def changeEvent(self, event) -> None:  # noqa: N802
         super().changeEvent(event)
-        if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
+        if sys.platform == "win32" and event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
             QTimer.singleShot(0, self._restore_visible_above_shell)
 
     def hideEvent(self, event) -> None:  # noqa: N802
         super().hideEvent(event)
         if self._allow_exit or self._hide_requested:
             return
-        if event.spontaneous():
+        if sys.platform == "win32" and event.spontaneous():
             QTimer.singleShot(0, self._restore_visible_above_shell)
 
     def _keep_topmost_above_shell(self) -> None:
@@ -1929,7 +1951,17 @@ class OverlayWindow(QWidget):
         if not was_visible:
             self.overlay_shown.emit()
 
+    def set_tray_available(self, available: bool) -> None:
+        self._tray_available = available
+        if not available:
+            self.close_button.setToolTip("Quit Lyricfy")
+
     def hide_to_tray(self) -> None:
+        if not self._tray_available:
+            self._allow_exit = True
+            self.close()
+            QApplication.instance().quit()
+            return
         was_visible = self.isVisible()
         self._hide_requested = True
         self._topmost_timer.stop()

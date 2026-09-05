@@ -4,9 +4,9 @@ import threading
 import time
 from dataclasses import dataclass
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
-from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE
+from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE, reload_shortcut_label
 from .cover_art import CoverArtRepository
 from .lyrics import LyricsRepository
 from .models import LyricsData, TrackInfo
@@ -40,23 +40,54 @@ class PlaybackWorker(QObject):
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop_event.clear()
+        prepare = getattr(self.playback_client, "prepare", None)
+        if prepare is not None:
+            prepare()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._stop_event.set()
+        cancel = getattr(self.playback_client, "cancel", None)
+        if cancel is not None:
+            cancel()
         if self._thread is not None and self._thread.is_alive():
-            self._thread.join(timeout=1.5)
-        self._thread = None
+            self._thread.join(timeout=0.1)
+        # Keep the reference until it actually exits. A replacement must wait.
+
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def stopping(self) -> bool:
+        return self._stop_event.is_set()
 
     def _run(self) -> None:
+        failures = 0
+        last_error = None
         while not self._stop_event.is_set():
+            delay = max(0.05, self.poll_interval_ms / 1000)
             try:
-                self.refreshed.emit(self.playback_client.get_current_track())
+                track = self.playback_client.get_current_track()
+                if not self._stop_event.is_set():
+                    self.refreshed.emit(track)
+                failures = 0
+                last_error = None
             except Exception as exc:  # noqa: BLE001
+                if self._stop_event.is_set():
+                    break
                 if not self._is_transient_error(exc):
-                    self.failed.emit(str(exc))
-            self._stop_event.wait(self.poll_interval_ms / 1000)
+                    message = str(exc)
+                    if message != last_error:
+                        self.failed.emit(message)
+                        last_error = message
+                    if not getattr(exc, "retryable", True):
+                        self._stop_event.wait()
+                        break
+                    failures = min(failures + 1, 5)
+                    delay = max(delay, min(30, 2 ** (failures - 1)))
+            self._stop_event.wait(delay)
 
     def _is_transient_error(self, exc: Exception) -> bool:
         return getattr(exc, "winerror", None) in self._TRANSIENT_WINERRORS
@@ -123,6 +154,7 @@ class AppController(QObject):
         self.sync_engine = SyncEngine()
         self.snapshot = PlaybackSnapshot()
         self.worker: PlaybackWorker | None = None
+        self._polling_enabled = False
         self.lyrics_worker = LyricsWorker(lyrics_repository)
         self.cover_worker = CoverArtWorker(CoverArtRepository())
         self._last_track_refresh_at = 0.0
@@ -139,6 +171,7 @@ class AppController(QObject):
         self.cover_worker.fetched.connect(self._apply_fetched_cover)
 
     def start(self) -> None:
+        self._polling_enabled = True
         if self.playback_client is None:
             self.overlay.set_track(None)
             self.overlay.set_lines(*self._playback_unavailable_lines())
@@ -148,10 +181,12 @@ class AppController(QObject):
         self._start_worker()
 
     def stop(self) -> None:
+        self._polling_enabled = False
         if self.worker is not None:
             self.worker.stop()
-            self.worker = None
         self._render_timer.stop()
+        self._lyrics_request_id += 1
+        self._cover_request_id += 1
 
     def reconnect(
         self,
@@ -163,12 +198,15 @@ class AppController(QObject):
         self.playback_client = playback_client
         self.config = config
         self.snapshot = PlaybackSnapshot()
-        self._lyrics_request_id = 0
+        self._lyrics_request_id += 1
         self._lyrics_retry_count = 0
         self._lyrics_retry_due_at = 0.0
         self._cover_request_id += 1
         self._cover_retry_due_at = 0.0
         self.sync_engine.set_lyrics(LyricsData(source="none", lines=[]))
+        self._last_track_refresh_at = 0.0
+        self._last_rendered_line = None
+        self.overlay.set_album_cover(None)
         self.overlay.load_config_values(config)
         if self.playback_client is None:
             self.overlay.set_track(None)
@@ -181,13 +219,10 @@ class AppController(QObject):
 
     def pause_polling(self) -> None:
         self.stop()
+        self.refresh(None)
 
     def resume_polling(self) -> None:
-        if self.playback_client is None:
-            return
-        if not self._render_timer.isActive():
-            self._render_timer.start()
-        self._start_worker()
+        self.start()
 
     def refresh(self, track: TrackInfo | None) -> None:
         if track is None:
@@ -312,18 +347,33 @@ class AppController(QObject):
         self._request_lyrics(track)
 
     def _start_worker(self) -> None:
-        if self.playback_client is None:
+        if not self._polling_enabled or self.playback_client is None:
             return
         if self.worker is not None:
-            return
+            if self.worker.is_running:
+                if self.worker.stopping:
+                    QTimer.singleShot(50, self._start_worker)
+                return
+            self.worker.deleteLater()
 
         self.worker = PlaybackWorker(
             playback_client=self.playback_client,
             poll_interval_ms=self.config.poll_interval_ms,
         )
-        self.worker.refreshed.connect(self.refresh)
-        self.worker.failed.connect(self.show_error)
+        self.worker.refreshed.connect(self._receive_track)
+        self.worker.failed.connect(self._receive_error)
         self.worker.start()
+
+    @Slot(object)
+    def _receive_track(self, track: TrackInfo | None) -> None:
+        if self._polling_enabled and self.sender() is self.worker and not self.worker.stopping:
+            self.refresh(track)
+
+    @Slot(str)
+    def _receive_error(self, message: str) -> None:
+        if self._polling_enabled and self.sender() is self.worker and not self.worker.stopping:
+            self.refresh(None)
+            self.show_error(message)
 
     def _render_current_state(self) -> None:
         track = self.snapshot.track
@@ -350,7 +400,8 @@ class AppController(QObject):
             return track.progress_ms
 
         elapsed_ms = int((time.monotonic() - self._last_track_refresh_at) * 1000)
-        return min(track.duration_ms, track.progress_ms + max(0, elapsed_ms))
+        position = track.progress_ms + max(0, elapsed_ms)
+        return min(track.duration_ms, position) if track.duration_ms > 0 else position
 
     def _format_error_message(self, message: str) -> str:
         normalized = message.strip()
@@ -376,9 +427,9 @@ class AppController(QObject):
         if self.config.playback_source == SPOTIFY_API_PLAYBACK_SOURCE:
             return (
                 "Fill Spotify API credentials in Settings",
-                "Then press Ctrl+R to retry",
+                f"Then press {reload_shortcut_label()} to retry",
             )
         return (
             "Open Spotify desktop and start playback",
-            "Then press Ctrl+R to retry",
+            f"Then press {reload_shortcut_label()} to retry",
         )
