@@ -160,4 +160,3 @@ class WindowsMediaSpotifyClient:
 
 
 __all__ = ["WindowsMediaSpotifyClient", "stable_windows_track_id"]
-
