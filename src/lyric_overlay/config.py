@@ -30,12 +30,21 @@ def _resource_dir() -> Path:
     return _repo_base_dir()
 
 
-def _user_data_dir() -> Path:
-    # Data user disimpan di APPDATA pada Windows, dengan fallback ke home.
-    appdata = os.getenv("APPDATA")
-    if appdata:
+def user_data_dir(platform: str, home: Path, appdata: str | None = None) -> Path:
+    """Resolve writable packaged data without consulting the bundle or cwd."""
+    if platform == "darwin":
+        return home / "Library" / "Application Support" / "Lyricfy"
+    if platform == "win32" and appdata:
         return Path(appdata) / "Lyricfy"
-    return Path.home() / ".lyricfy"
+    return home / ".lyricfy"
+
+
+def _user_data_dir() -> Path:
+    return user_data_dir(sys.platform, Path.home(), os.getenv("APPDATA"))
+
+
+def reload_shortcut_label() -> str:
+    return "Command+R" if sys.platform == "darwin" else "Ctrl+R"
 
 
 REPO_BASE_DIR = _repo_base_dir()
@@ -49,11 +58,15 @@ LRC_DIR = ASSETS_DIR / "lrc"
 FETCHED_LRC_DIR = LRC_DIR / "downloaded"
 TOKEN_CACHE = APP_DATA_DIR / ".spotify_cache"
 ENV_FILE = APP_DATA_DIR / ".env"
-FALLBACK_ENV_FILE = BASE_DIR / ".env"
-ICON_FILE = RESOURCE_DIR / "icon.ico"
+FALLBACK_ENV_FILE = ENV_FILE if sys.platform == "darwin" else BASE_DIR / ".env"
+ICON_FILE = RESOURCE_DIR / ("icon.png" if sys.platform == "darwin" else "icon.ico")
+TRAY_ICON_FILE = RESOURCE_DIR / "assets" / "macos" / "tray.svg" if sys.platform == "darwin" else ICON_FILE
+LOCAL_PLAYBACK_SOURCE = "local"
+# Accepted when reading configurations created by earlier Windows releases.
 WINDOWS_PLAYBACK_SOURCE = "windows"
 SPOTIFY_API_PLAYBACK_SOURCE = "spotify_api"
-PLAYBACK_SOURCES = {WINDOWS_PLAYBACK_SOURCE, SPOTIFY_API_PLAYBACK_SOURCE}
+PLAYBACK_SOURCES = {LOCAL_PLAYBACK_SOURCE, SPOTIFY_API_PLAYBACK_SOURCE}
+DEFAULT_FONT_FAMILY = "system" if sys.platform == "darwin" else "Segoe UI"
 TEXT_ALIGNMENTS = {"left", "center", "right"}
 CARD_DISPLAY_STYLE = "card"
 FLOATING_DISPLAY_STYLE = "floating"
@@ -99,7 +112,7 @@ class AppConfig:
     lyric_text_color: str = "#F4F4F4"
     lyric_glow_color: str = "#66CCFFFF"
     lyric_toggle_color: str = "#1A1A1A"
-    lyric_font_family: str = "Segoe UI"
+    lyric_font_family: str = DEFAULT_FONT_FAMILY
     lyric_font_size: int = 11
     text_alignment: str = "left"
     display_style: str = CARD_DISPLAY_STYLE
@@ -119,7 +132,7 @@ class AppConfig:
 def default_config() -> AppConfig:
     # Nilai default dipakai saat .env belum ada.
     return AppConfig(
-        playback_source=WINDOWS_PLAYBACK_SOURCE,
+        playback_source=LOCAL_PLAYBACK_SOURCE,
         spotify_client_id="",
         spotify_client_secret="",
         spotify_redirect_uri="http://127.0.0.1:8888/callback",
@@ -132,7 +145,7 @@ def default_config() -> AppConfig:
         lyric_text_color="#F4F4F4",
         lyric_glow_color="#66CCFFFF",
         lyric_toggle_color="#1A1A1A",
-        lyric_font_family="Segoe UI",
+        lyric_font_family=DEFAULT_FONT_FAMILY,
         lyric_font_size=11,
         text_alignment="left",
         display_style=CARD_DISPLAY_STYLE,
@@ -161,7 +174,7 @@ def load_config() -> AppConfig:
     # Semua nilai environment dikonversi ke AppConfig agar mudah dipakai modul lain.
     return AppConfig(
         playback_source=_normalize_playback_source(
-            os.getenv("PLAYBACK_SOURCE", WINDOWS_PLAYBACK_SOURCE).strip().lower()
+            os.getenv("PLAYBACK_SOURCE", LOCAL_PLAYBACK_SOURCE)
         ),
         spotify_client_id=os.getenv("SPOTIFY_CLIENT_ID", "").strip(),
         spotify_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET", "").strip(),
@@ -178,7 +191,7 @@ def load_config() -> AppConfig:
         lyric_text_color=os.getenv("LYRIC_TEXT_COLOR", "#F4F4F4").strip() or "#F4F4F4",
         lyric_glow_color=os.getenv("LYRIC_GLOW_COLOR", "#66CCFFFF").strip() or "#66CCFFFF",
         lyric_toggle_color=os.getenv("LYRIC_TOGGLE_COLOR", "#1A1A1A").strip() or "#1A1A1A",
-        lyric_font_family=os.getenv("LYRIC_FONT_FAMILY", "Segoe UI").strip() or "Segoe UI",
+        lyric_font_family=os.getenv("LYRIC_FONT_FAMILY", DEFAULT_FONT_FAMILY).strip() or DEFAULT_FONT_FAMILY,
         lyric_font_size=int(os.getenv("LYRIC_FONT_SIZE", "11")),
         text_alignment=_normalize_text_alignment(os.getenv("TEXT_ALIGNMENT", "left")),
         display_style=_normalize_display_style(os.getenv("DISPLAY_STYLE", CARD_DISPLAY_STYLE)),
@@ -231,7 +244,7 @@ def _normalize_playback_source(value: str) -> str:
     normalized = (value or "").strip().lower()
     if normalized in PLAYBACK_SOURCES:
         return normalized
-    return WINDOWS_PLAYBACK_SOURCE
+    return LOCAL_PLAYBACK_SOURCE
 
 
 def _normalize_text_alignment(value: str) -> str:
