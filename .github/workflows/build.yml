@@ -1,0 +1,80 @@
+name: Test and build desktop apps
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            python_arch: x64
+            target: windows
+          - os: macos-15
+            python_arch: arm64
+            target: macos-arm64
+          - os: macos-15-intel
+            python_arch: x64
+            target: macos-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.python_arch }}
+          cache: pip
+      - name: Record environment and install dependencies
+        run: |
+          python -VV
+          python -m pip install -r requirements.txt
+          python -m pip check
+      - name: Run tests
+        run: python -m pytest -q --junitxml=build/test-results.xml
+      - name: Build Windows executable
+        if: runner.os == 'Windows'
+        run: python -m PyInstaller --noconfirm --clean --distpath dist/windows --workpath build/windows packaging/windows.spec
+      - name: Smoke test Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $smokeProcess = Start-Process -FilePath '.\dist\windows\Lyricfy.exe' -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
+          if (-not $smokeProcess.WaitForExit(30000)) { $smokeProcess.Kill(); throw 'Smoke test timed out' }
+          if ($smokeProcess.ExitCode -ne 0) { throw "Smoke test failed: $($smokeProcess.ExitCode)" }
+      - name: Build macOS preview and smoke test bundle
+        if: runner.os == 'macOS'
+        env:
+          LYRICFY_PYTHON: python
+        run: bash build-macos.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Lyricfy-${{ matrix.target }}-preview
+          if-no-files-found: error
+          path: |
+            dist/windows/Lyricfy.exe
+            dist/macos-*/*.zip
+            dist/macos-*/*.dmg
+            dist/macos-*/SHA256SUMS.txt
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-${{ matrix.target }}
+          path: build/test-results.xml
+          if-no-files-found: ignore
