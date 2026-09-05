@@ -1,6 +1,8 @@
 # Lyricfy
 
-Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from the local Windows media session by default, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
+Lyricfy is a lightweight Spotify lyric overlay built with Python and PySide6. It reads local playback through Windows media sessions or Spotify's macOS scripting interface, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
+
+Windows builds are validated locally. macOS support is implemented as a preview pending native playback, permissions, and desktop QA. See the [macOS validation checklist](docs/qa/macos-support.md) before treating it as a supported public release.
 
 ## Features
 
@@ -26,7 +28,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - System tray controls for show, hide, settings, and exit
 - System tray playback mode switch between `Non-API` and `API`
 - In-app settings for display presets, artwork, Spotify credentials, lyric offset, alignment, font, and colors
-- Windows local playback mode by default on startup, without Spotify Developer credentials
+- Local playback mode by default on Windows and macOS, without Spotify Developer credentials
 - Auto-created `.env` file on first launch
 - Separate Spotify token cache for packaged builds
 - Automatic `.lrc` cache for lyrics fetched from LRCLIB
@@ -35,7 +37,7 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - `Shift+C` shortcut to toggle between the lyric color and a custom toggle color quickly
 - `Shift+S` shortcut to open or close settings quickly
 - `Shift+F` shortcut to hide the overlay to tray quickly
-- `Ctrl+R` shortcut to reload Spotify connection quickly
+- `Ctrl+R` (`Command+R` on macOS) shortcut to reload Spotify connection quickly
 - `Shift+H` shortcut to return the overlay to the top-center of its current monitor
 
 ## Quick Start
@@ -53,11 +55,24 @@ python src\main.py
 2. Open Spotify desktop and start playback.
 3. Lyricfy should detect the current track automatically.
 
+On macOS, use Terminal:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
+python src/main.py
+```
+
+With Spotify running, allow the Automation request to read Spotify playback. A source run can show Terminal or Python as the requester; validate permissions again for the installed `.app`. If permission is denied, enable it in System Settings > Privacy & Security > Automation, then select `Reload Playback`. Lyricfy does not repeatedly request denied permission. Starting hidden defers the connection until you show the overlay or explicitly reload playback.
+
 ## Requirements
 
-- Windows
+- Windows; macOS 13+ is the preview target (native validation pending)
 - Python 3.11 or newer
-- Spotify desktop app running on Windows
+- Spotify desktop app for local playback; Spotify Web API mode is also available
+- Native macOS Python matching Apple Silicon (`arm64`) or Intel (`x86_64`) for Mac builds
 
 ## Project Structure
 
@@ -75,12 +90,16 @@ python src\main.py
 |       |-- main.py
 |       |-- models.py
 |       |-- overlay.py
+|       |-- platform/
 |       |-- spotify_client.py
 |       `-- sync_engine.py
 |-- .env.example
 |-- build.bat
+|-- build-macos.sh
 |-- icon.ico
-|-- Lyricfy.spec
+|-- icon.png
+|-- Lyricfy-macos.spec
+|-- packaging/windows.spec
 |-- requirements.txt
 `-- README.md
 ```
@@ -133,10 +152,18 @@ In packaged `.exe` mode, runtime files are stored in:
 %APPDATA%\Lyricfy\
 ```
 
+In packaged macOS `.app` mode, writable runtime files are stored in:
+
+```text
+~/Library/Application Support/Lyricfy/
+```
+
+This folder contains `.env`, `.spotify_cache`, and `assets/lrc/` (including `downloaded/`). Bundled images and scripts remain inside the app; settings and caches are never written into the bundle. macOS diagnostics rotate in `~/Library/Logs/Lyricfy/lyricfy.log`.
+
 If no `.env` exists yet, Lyricfy creates one automatically with these defaults:
 
 ```env
-PLAYBACK_SOURCE=windows
+PLAYBACK_SOURCE=local
 SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
@@ -149,7 +176,7 @@ OVERLAY_TEXT_COLOR=#F4F4F4
 LYRIC_TEXT_COLOR=#F4F4F4
 LYRIC_GLOW_COLOR=#66CCFFFF
 LYRIC_TOGGLE_COLOR=#1A1A1A
-LYRIC_FONT_FAMILY=Segoe UI
+LYRIC_FONT_FAMILY=system
 LYRIC_FONT_SIZE=11
 TEXT_ALIGNMENT=left
 DISPLAY_STYLE=card
@@ -165,6 +192,8 @@ HOVER_BUTTONS_ENABLED=false
 AUTOSTART_ENABLED=false
 AUTOSTART_START_HIDDEN=false
 ```
+
+`system` uses the macOS application font or Segoe UI on Windows. Newly generated Windows settings retain `Segoe UI`; existing font choices are preserved, with a system fallback for fonts unavailable on macOS. Legacy `PLAYBACK_SOURCE=windows` values load as `local` and are normalized on the next settings save.
 
 Important runtime files:
 
@@ -216,6 +245,8 @@ The downloader:
 - Saves downloaded files to `assets\lrc\downloaded\`
 - Writes a JSON report to `assets\lrc\downloaded\lrc_download_report.json` by default
 
+The downloader remains a separate source CLI on both platforms; it is not included in the GUI executable or `.app`. To reuse its downloads in a packaged app, copy the `.lrc` files into that app's writable `assets/lrc/downloaded/` folder described above.
+
 If Spotify login was already cached before these read-only scopes were added, delete `.spotify_cache` and run the downloader again to authorize the updated scopes.
 
 ## Settings Panel
@@ -251,7 +282,7 @@ The built-in settings panel supports:
 - Clear downloaded lyric cache
 - Close Settings
 
-Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl+R` to reconnect with the latest credentials.
+Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl+R` (`Command+R` on macOS) to reconnect with the latest credentials. API login opens a browser with a bounded loopback callback wait. Cancellation, a busy callback port, or login timeout is reported in the overlay; retry with `Reload Playback`.
 
 ### Display Presets
 
@@ -267,7 +298,7 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 
 - Album artwork is optional and disabled by default.
 - Enable `Show album cover` in Settings to place a 48px rounded cover beside the lyrics.
-- Spotify API mode uses the album image URL from Spotify; Non-API mode uses artwork exposed by the Windows media session when available.
+- Spotify API mode uses the album image URL from Spotify; Non-API mode uses artwork exposed by the Windows media session or Spotify's macOS scripting interface when available.
 - If artwork is loading, missing, or invalid, Lyricfy automatically keeps the normal lyric-only layout without a placeholder or error.
 - Floating presets can keep artwork `Always Visible` or show it only `On Hover`.
 - Artwork and the lyric block remain vertically centered with each other in every display mode, including wrapped lyrics and `Current + Next`.
@@ -283,8 +314,9 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 
 `PLAYBACK_SOURCE` supports:
 
-- `windows` for local Windows media session playback detection
-- `spotify_api` to force the previous Spotify Web API flow
+- `local` for Windows media sessions or macOS Spotify scripting, selected automatically by OS
+- `windows` as a backward-compatible alias for `local`
+- `spotify_api` for the Spotify Web API flow
 
 You can also change the mode from the tray menu:
 
@@ -294,7 +326,7 @@ You can also change the mode from the tray menu:
 - `Snap Home` -> return the overlay to top-center on its current monitor
 - `Mode` -> `Non-API` or `API`
 - `Overlay Controls` -> show or hide the overlay controls and enable `Card Controls on Hover`
-- `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
+- `Startup` -> enable login startup and choose whether Lyricfy opens visible or starts hidden in the tray/menu bar
 - `Display Preset` -> `Card Default`, `Floating Minimal`, or `Floating Context`
 - `Lyricfy v1.4.2`
 
@@ -305,6 +337,14 @@ POLL_INTERVAL_MS=1000
 ```
 
 This keeps Spotify playback detection responsive without polling too aggressively.
+
+### macOS Menu Bar and Login Startup
+
+The macOS app uses a menu bar icon with Show, Hide, Settings, mode selection, and Quit. It does not normally display a Dock icon. If the tray/menu bar is unavailable, the overlay stays visible and its close control quits the app.
+
+Install `Lyricfy.app` in `/Applications` or `~/Applications` before enabling Auto Start. Lyricfy registers `~/Library/LaunchAgents/com.lyricfy.overlay.plist` for the next login. Enabling it does not launch a second copy immediately. Source runs and apps in Downloads or mounted DMGs cannot enable it. If the app is moved after registration, install it in Applications and turn Auto Start off and on to repair the path.
+
+macOS may independently disable a registered item in System Settings > General > Login Items. Lyricfy reports registration rather than claiming OS permission. It does not rewrite the registration on each app launch. Test visible and hidden startup after a real logout/login before release.
 
 ## Lyric Offset
 
@@ -350,6 +390,10 @@ If an LRCLIB exact lookup fails because of a network timeout or request error, L
 
 ## Build
 
+Build on the target OS: Windows creates `.exe`; macOS creates `.app`, `.zip`, and `.dmg`. The same Python source supports both. A Windows machine can obtain Mac artifacts through the macOS jobs in [GitHub Actions](.github/workflows/build.yml) once the changes are pushed and the workflow has run.
+
+### Windows
+
 Build the standalone executable with:
 
 ```powershell
@@ -364,11 +408,49 @@ dist\Lyricfy.exe
 
 The build script packages the app as a one-file windowed executable and includes the application icon.
 
+The tracked build input is `packaging/windows.spec`. For a non-interactive build:
+
+```powershell
+.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean packaging/windows.spec
+```
+
+### macOS Preview
+
+After installing dependencies in a native Mac virtual environment:
+
+```bash
+source .venv/bin/activate
+bash build-macos.sh
+```
+
+The script generates the ICNS icon from tracked `icon.png`, builds the bundle, verifies its signature, runs an offscreen startup smoke test, and creates archives with checksums under `dist/macos-arm64/` or `dist/macos-x86_64/`. Default preview builds use ad-hoc signing and are not notarized public releases. Build each architecture with its native Python; there is no Windows-to-macOS cross-compilation or universal2 output.
+
+### macOS Signed Release
+
+After native QA, use a Mac with a Developer ID Application certificate/private key installed and a configured `notarytool` keychain profile:
+
+```bash
+export LYRICFY_CODESIGN_IDENTITY='Developer ID Application: Your Name (TEAMID)'
+export LYRICFY_NOTARY_PROFILE='lyricfy-notary'
+bash build-macos.sh --release
+```
+
+Release mode signs with hardened runtime and the Apple Events entitlement, requires notarization acceptance, staples tickets, and checks Gatekeeper assessment for the app and DMG. Credentials stay in the keychain. The default CI workflow builds previews without signing secrets. Validate the downloaded release on a clean Mac account as described in the [QA checklist](docs/qa/macos-support.md).
+
+### Automated Checks
+
+```text
+python -m pip check
+python -m pytest -q
+```
+
+GitHub Actions runs tests and builds on Windows, macOS Apple Silicon, and macOS Intel, using Python 3.11 and recording the exact version. Download the matching preview artifact from the workflow run. These checks verify imports and bundle startup; interactive Spotify, Automation, Spaces, and login behavior still require native QA.
+
 ## Runtime Behavior
 
 - The overlay opens near the top-center of the screen
 - The overlay can appear first and continue connecting to Spotify in the background during startup
-- Closing the overlay hides it to the system tray instead of exiting
+- Closing the overlay hides it to the system tray/menu bar; without a tray, closing quits
 - Hiding the overlay pauses Spotify polling until the overlay is shown again
 - The tray icon remains available for reopening settings or exiting the app
 - The app starts in `Non-API` mode by default unless you explicitly saved `API` mode in `.env`
@@ -378,13 +460,14 @@ The build script packages the app as a one-file windowed executable and includes
 - If lyric lookup still fails after automatic retries, the overlay briefly shows `No lyric found` and then returns to the title and artist view
 - If playback is paused, the overlay shows a paused status
 - If Windows media session access is unavailable, the overlay prompts you to open Spotify desktop and retry
+- macOS local mode leaves Spotify closed if it is not running and distinguishes denied Automation permission from transient playback failures
 
 ## Keyboard Shortcuts
 
 - `Shift+C` toggles between the lyric color and the custom toggle lyric color
 - `Shift+S` opens or closes the settings panel
 - `Shift+F` hides the overlay to the system tray
-- `Ctrl+R` reloads the Spotify connection without opening settings
+- `Ctrl+R` (`Command+R` on macOS) reloads the Spotify connection without opening settings
 - `Shift+H` snaps the overlay to its top-center home position on the current monitor
 - Compact mode may be positioned partly off-screen; Settings stays fully visible and `Shift+H` restores the overlay if needed
 
@@ -399,6 +482,7 @@ The build script packages the app as a one-file windowed executable and includes
 ## Sources
 
 - Windows Global System Media Transport Controls session for playback state
+- Spotify's macOS scripting dictionary through JXA/Apple Events for local Mac playback
 - LRCLIB for synced lyric fallback
 
 ## Author
