@@ -49,7 +49,9 @@ class WindowsMediaSpotifyClient:
 
     def get_current_track(self) -> TrackInfo | None:
         try:
-            return asyncio.run(self._get_current_track_async())
+            return asyncio.run(asyncio.wait_for(self._get_current_track_async(), timeout=2.0))
+        except (TimeoutError, asyncio.TimeoutError):
+            return None
         except OSError as exc:
             if getattr(exc, "winerror", None) in WINDOWS_MEDIA_TRANSIENT_WINERRORS:
                 return None
@@ -119,14 +121,14 @@ class WindowsMediaSpotifyClient:
         try:
             from winsdk.windows.storage.streams import DataReader
 
-            stream = await thumbnail.open_read_async()
+            stream = await asyncio.wait_for(thumbnail.open_read_async(), timeout=2.0)
             size = int(stream.size)
             if size <= 0 or size > MAX_WINDOWS_COVER_BYTES:
                 stream.close()
                 return None
             input_stream = stream.get_input_stream_at(0)
             reader = DataReader(input_stream)
-            loaded = await reader.load_async(size)
+            loaded = await asyncio.wait_for(reader.load_async(size), timeout=2.0)
             if loaded <= 0:
                 reader.close()
                 stream.close()
@@ -137,7 +139,7 @@ class WindowsMediaSpotifyClient:
             reader.close()
             stream.close()
             return data or None
-        except (AttributeError, OSError, RuntimeError, ValueError):
+        except (AttributeError, OSError, RuntimeError, ValueError, TimeoutError, asyncio.TimeoutError):
             return None
 
     def _pick_spotify_session(self, current_session, sessions):
