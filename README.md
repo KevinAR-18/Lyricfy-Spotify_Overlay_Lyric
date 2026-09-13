@@ -85,6 +85,61 @@ python src\main.py
 `-- README.md
 ```
 
+## Cinematic Lyrics
+
+Cinematic Lyrics is an optional Qt Quick presentation designed for filming your
+monitor with a phone. It follows the same Spotify playback and synced lyrics as
+the classic overlay. Previous, active, and upcoming lyric blocks move together;
+long lines wrap at word boundaries within a configurable maximum width.
+
+### Open and customize
+
+1. Run `python src\main.py` and play a song in Spotify.
+2. Right-click the Lyricfy tray icon and enable **Cinematic Lyrics**, or press
+   **Shift+M** while the classic overlay has focus.
+3. Hover over the Cinematic window and click **Style**, or press **Shift+S**.
+4. Adjust font, size, bold, alignment, individual lyric colors, context opacity,
+   maximum text width, padding, spacing, glow, transition duration, and motion.
+5. Select a transparent, solid, gradient, or album-colored background. Background
+   motion, vignette, title/artist, and album cover can be customized independently.
+6. Changes preview immediately. **Save** persists them; **Cancel** restores the
+   saved style. Album-colored backgrounds fetch artwork even if the cover is hidden.
+
+The initial Cinematic style is a transparent, always-on-top overlay with warm
+white lyrics. Drag its background to move it; drag the bottom-right grip to resize.
+**F11** or a double-click toggles fullscreen; **Esc** leaves fullscreen.
+**Shift+H** centers the window on its current monitor. **Shift+F** hides it to the
+tray. **Classic** or **Shift+M** returns to the classic overlay. Shortcuts act on
+the focused window. Tray **Show Overlay**, **Hide Overlay**, and **Snap Home**
+follow the selected mode; **Open Settings** opens the original playback settings.
+
+Each wrapped lyric remains one timestamped block. Context fades away if the window
+is too short; exceptionally tall active lyrics become scrollable rather than
+being truncated or automatically shrunk. Pause holds the active block; seeking
+resets the visual position. Repeated text at different timestamps still transitions.
+Rendering uses Qt Quick animation timing, independently of Spotify polling; actual
+frame rate depends on the GPU, display, and effects selected.
+
+Settings are stored in `.env` as `CINEMATIC_ENABLED` and the JSON-valued
+`CINEMATIC_OPTIONS`. The in-app style panel handles validation and serialization.
+
+### Offline preview
+
+Try the visual style without Spotify or changing saved preferences:
+
+```powershell
+python src\main.py --cinematic-demo
+```
+
+The preview cycles sample Indonesian lines, including long and repeated lyrics.
+Use `--demo-seconds 10` to exit automatically, including with a packaged executable:
+
+```powershell
+Lyricfy.exe --cinematic-demo --demo-seconds 10
+```
+
+`build.bat` includes the QML scene and Qt Quick runtime in the Windows executable.
+
 ## Spotify API Mode Setup
 
 1. Open the Spotify Developer Dashboard.
