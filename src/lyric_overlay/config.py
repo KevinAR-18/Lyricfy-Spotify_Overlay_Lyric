@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from .cinematic.preferences import DEFAULTS, decode_options, encode_options
 
 
 def _repo_base_dir() -> Path:
@@ -114,6 +116,8 @@ class AppConfig:
     hover_buttons_enabled: bool = False
     autostart_enabled: bool = False
     autostart_start_hidden: bool = False
+    cinematic_enabled: bool = False
+    cinematic_options: dict = field(default_factory=lambda: dict(DEFAULTS))
 
 
 def default_config() -> AppConfig:
@@ -202,6 +206,8 @@ def load_config() -> AppConfig:
         hover_buttons_enabled=os.getenv("HOVER_BUTTONS_ENABLED", "false").lower() == "true",
         autostart_enabled=os.getenv("AUTOSTART_ENABLED", "false").lower() == "true",
         autostart_start_hidden=os.getenv("AUTOSTART_START_HIDDEN", "false").lower() == "true",
+        cinematic_enabled=os.getenv("CINEMATIC_ENABLED", "false").lower() == "true",
+        cinematic_options=decode_options(os.getenv("CINEMATIC_OPTIONS", "{}")),
     )
 
 
@@ -324,5 +330,7 @@ def save_config(config: AppConfig) -> None:
         f"HOVER_BUTTONS_ENABLED={'true' if config.hover_buttons_enabled else 'false'}",
         f"AUTOSTART_ENABLED={'true' if config.autostart_enabled else 'false'}",
         f"AUTOSTART_START_HIDDEN={'true' if config.autostart_start_hidden else 'false'}",
+        f"CINEMATIC_ENABLED={'true' if config.cinematic_enabled else 'false'}",
+        f"CINEMATIC_OPTIONS='{encode_options(config.cinematic_options)}'",
     ]
     ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
