@@ -123,6 +123,9 @@ def set_windows_autostart(enabled: bool, start_hidden: bool) -> None:
 
 
 def main() -> int:
+    if "--cinematic-demo" in sys.argv:
+        from lyric_overlay.cinematic.demo import run_demo
+        return run_demo()
     qInstallMessageHandler(qt_message_handler)
     ensure_directories()
     ensure_env_file()
