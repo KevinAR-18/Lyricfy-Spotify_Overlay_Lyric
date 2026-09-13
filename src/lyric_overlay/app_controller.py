@@ -103,6 +103,8 @@ class CoverArtWorker(QObject):
 
 
 class AppController(QObject):
+    cinematic_frame = Signal(object)
+    cinematic_artwork = Signal(object)
     _RENDER_INTERVAL_MS = 50
     _MAX_LYRICS_RETRIES = 3
     _LYRICS_RETRY_DELAY_SECONDS = 4.0
@@ -120,6 +122,7 @@ class AppController(QObject):
         self.lyrics_repository = lyrics_repository
         self.overlay = overlay
         self.config = config
+        self.cinematic_cover_preview = False
         self.sync_engine = SyncEngine()
         self.snapshot = PlaybackSnapshot()
         self.worker: PlaybackWorker | None = None
@@ -169,6 +172,7 @@ class AppController(QObject):
         self._cover_request_id += 1
         self._cover_retry_due_at = 0.0
         self.sync_engine.set_lyrics(LyricsData(source="none", lines=[]))
+        self._render_cinematic_state()
         self.overlay.load_config_values(config)
         if self.playback_client is None:
             self.overlay.set_track(None)
@@ -204,6 +208,7 @@ class AppController(QObject):
             self.overlay.set_album_cover(None)
             self.overlay.set_lines("", "")
             self.overlay.show_status("")
+            self._render_cinematic_state()
             return
 
         track_changed = self.snapshot.track is None or self.snapshot.track.track_id != track.track_id
@@ -215,13 +220,13 @@ class AppController(QObject):
             self._cover_request_id += 1
             self._cover_retry_due_at = 0.0
             self.overlay.set_album_cover(None)
-            if self.config.show_album_cover:
+            if self._needs_cover():
                 self._request_album_cover(track)
             self._request_lyrics(track)
         else:
             self.snapshot.track = track
             self._retry_lyrics_if_needed(track)
-            if self.config.show_album_cover and time.monotonic() >= self._cover_retry_due_at:
+            if self._needs_cover() and time.monotonic() >= self._cover_retry_due_at:
                 self._request_album_cover(track)
 
         self._last_track_refresh_at = time.monotonic()
@@ -242,9 +247,18 @@ class AppController(QObject):
         self._cover_request_id += 1
         self._cover_retry_due_at = 0.0
         self.overlay.set_album_cover(None)
+        self.cinematic_artwork.emit(None)
         track = self.snapshot.track
-        if self.config.show_album_cover and track is not None:
+        if self._needs_cover() and track is not None:
             self._request_album_cover(track)
+
+    def _needs_cover(self) -> bool:
+        return self.config.show_album_cover or getattr(self, "cinematic_cover_preview", False) or (
+            self.config.cinematic_enabled and (
+                self.config.cinematic_options["show_cover"]
+                or self.config.cinematic_options["background"] == "album"
+            )
+        )
 
     def _request_album_cover(self, track: TrackInfo) -> None:
         self._cover_retry_due_at = float("inf")
@@ -254,10 +268,11 @@ class AppController(QObject):
         track = self.snapshot.track
         if track is None or track.track_id != track_id or request_id != self._cover_request_id:
             return
-        if not self.config.show_album_cover:
+        if not self._needs_cover():
             return
         self._cover_retry_due_at = 0.0 if data else time.monotonic() + 5.0
         self.overlay.set_album_cover(data)
+        self.cinematic_artwork.emit(data)
 
     def show_error(self, message: str) -> None:
         self.overlay.show_status(self._format_error_message(message))
@@ -326,6 +341,7 @@ class AppController(QObject):
         self.worker.start()
 
     def _render_current_state(self) -> None:
+        self._render_cinematic_state()
         track = self.snapshot.track
         if track is None:
             return
@@ -344,6 +360,30 @@ class AppController(QObject):
 
         self._last_rendered_line = rendered_line
         self.overlay.set_lines(*rendered_line)
+
+    def _render_cinematic_state(self) -> None:
+        track = self.snapshot.track
+        lyrics = self.snapshot.lyrics
+        progress = max(0, self._estimated_progress_ms(track) + self.config.lyric_offset_ms) if track else 0
+        index, _ = self.sync_engine.current_line(progress)
+        lines = lyrics.lines if lyrics else []
+        rows = [{"index": i, "text": lines[i].text}
+                for i in range(max(0, index - 2), min(len(lines), index + 3))]
+        message = ""
+        if not track:
+            message = "Waiting for Spotify playback"
+        elif not lines:
+            message = "Fetching lyrics…" if self._should_show_fetching_status() else "No synced lyrics found"
+        elif index < 0:
+            message = "♪"
+        elif not lines[index].text.strip():
+            message = "♪"
+        remaining = lines[index + 1].timestamp_ms - progress if index + 1 < len(lines) else 1000
+        self.cinematic_frame.emit({
+            "track": track.track_id if track else "", "title": track.title if track else "Lyricfy",
+            "artist": track.artist if track else "Open Spotify to start", "playing": bool(track and track.is_playing),
+            "index": index, "rows": rows, "progress": progress, "remaining": remaining, "message": message,
+        })
 
     def _estimated_progress_ms(self, track: TrackInfo) -> int:
         if not track.is_playing or self._last_track_refresh_at <= 0:
