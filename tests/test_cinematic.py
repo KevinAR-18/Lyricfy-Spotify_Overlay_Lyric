@@ -43,11 +43,14 @@ def test_preferences_roundtrip_handles_font_quotes_and_interpolation(tmp_path, m
 
 def test_preferences_validate_corrupt_values():
     options = normalize_options({"font_size": 99999, "text_width": -3, "duration": "broken",
-                                 "active_color": "not a color", "background": "invalid"})
+                                 "active_color": "not a color", "background": "invalid",
+                                 "ambient_effect": "magic", "ambient_intensity": 500})
     assert options["font_size"] == 100
     assert options["text_width"] == 200
     assert options["duration"] == 400
     assert options["active_color"] == DEFAULTS["active_color"]
+    assert options["ambient_effect"] == DEFAULTS["ambient_effect"]
+    assert options["ambient_intensity"] == 100
     assert decode_options("malformed") == DEFAULTS
 
 
@@ -190,3 +193,36 @@ def test_mode_switch_style_cancel_and_save_preserve_playback_config(app, monkeyp
             manager.window.deleteLater()
         overlay.deleteLater()
         app.processEvents()
+
+
+def test_ambient_effects_render_and_react_to_lyrics(app):
+    from lyric_overlay.cinematic.settings import CinematicSettings
+
+    for effect in ("leaves", "aurora", "stardust"):
+        opts = dict(DEFAULTS, background="transparent", ambient_effect=effect, ambient_intensity=75)
+        window = CinematicWindow(opts)
+        try:
+            window.resize(500, 400)
+            window.show()
+            window.bridge.set_frame(frame(0, 0, text=["Line 1", "Line 2", "Line 3"]))
+            QTest.qWait(150)
+            # Advance lyric to trigger gust and pulse
+            window.bridge.set_frame(frame(1, 500, text=["Line 1", "Line 2", "Line 3"]))
+            QTest.qWait(150)
+            image = window.grabWindow()
+            assert not image.isNull()
+            assert window.status() == window.Status.Ready
+        finally:
+            window.hide()
+            window.deleteLater()
+            app.processEvents()
+
+    # Verify settings dialog updates ambient_effect and ambient_intensity
+    settings = CinematicSettings(DEFAULTS)
+    settings.update_option("ambient_effect", "leaves")
+    assert settings.options["ambient_effect"] == "leaves"
+    settings.update_option("ambient_intensity", 80)
+    assert settings.options["ambient_intensity"] == 80
+    settings.deleteLater()
+    app.processEvents()
+
