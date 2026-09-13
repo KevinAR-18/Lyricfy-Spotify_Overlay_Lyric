@@ -23,6 +23,7 @@ LABELS = {
     "vignette": "Vignette intensity (%)", "duration": "Transition duration (ms)",
     "motion": "Motion intensity (%)", "show_info": "Show title and artist",
     "show_cover": "Show album cover",
+    "ambient_effect": "Ambient effect", "ambient_intensity": "Ambient intensity (%)",
 }
 
 

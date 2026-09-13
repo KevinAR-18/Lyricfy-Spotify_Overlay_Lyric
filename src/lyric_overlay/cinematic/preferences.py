@@ -12,16 +12,19 @@ DEFAULTS = {
     "gradient_color": "#46304F", "background_motion": True,
     "glow_color": "#DAC5FF", "glow_strength": 12, "vignette": 25,
     "duration": 400, "motion": 100, "show_info": True, "show_cover": False,
+    "ambient_effect": "none", "ambient_intensity": 50,
 }
 RANGES = {
     "font_size": (16, 100), "context_opacity": (0, 100),
     "text_width": (200, 1600), "padding": (8, 120), "gap": (4, 100),
     "glow_strength": (0, 100), "vignette": (0, 100),
     "duration": (100, 1000), "motion": (0, 100),
+    "ambient_intensity": (10, 100),
 }
 CHOICES = {
     "alignment": ("left", "center", "right"),
     "background": ("transparent", "solid", "gradient", "album"),
+    "ambient_effect": ("none", "leaves", "aurora", "stardust"),
 }
 
 
