@@ -139,6 +139,8 @@ def main() -> int:
         overlay.setWindowIcon(QIcon(str(icon_path)))
     overlay.load_config_values(config)
 
+    from lyric_overlay.cinematic.manager import CinematicManager
+
     def merge_config(base_config: AppConfig, updates: AppConfig) -> AppConfig:
         return replace(
             base_config,
@@ -277,6 +279,14 @@ def main() -> int:
         tray_menu.addAction(snap_home_action)
         tray_menu.addMenu(mode_menu)
         tray_menu.addMenu(display_preset_menu)
+        cinematic_action = QAction("Cinematic Lyrics", tray_menu)
+        cinematic_action.setCheckable(True)
+        cinematic_action.setChecked(config.cinematic_enabled)
+        cinematic_action.triggered.connect(lambda checked: cinematic.set_enabled(checked))
+        tray_menu.addAction(cinematic_action)
+        cinematic_style_action = QAction("Cinematic Style…", tray_menu)
+        cinematic_style_action.triggered.connect(lambda: cinematic.open_settings())
+        tray_menu.addAction(cinematic_style_action)
         tray_menu.addMenu(overlay_buttons_menu)
         tray_menu.addMenu(startup_menu)
         tray_menu.addSeparator()
@@ -286,10 +296,10 @@ def main() -> int:
         tray_icon.setContextMenu(tray_menu)
 
         def show_overlay() -> None:
-            overlay.show_from_tray()
+            cinematic.show()
 
         def hide_overlay() -> None:
-            overlay.hide_to_tray()
+            cinematic.hide()
 
         def open_settings() -> None:
             overlay.open_settings_from_tray()
@@ -326,6 +336,7 @@ def main() -> int:
             overlay.load_config_values(updated_config)
             overlay.apply_display_preset(preset)
             sync_display_preset_actions(updated_config)
+            cinematic.set_enabled(False)
 
         def apply_overlay_button_visibility(
             *,
@@ -395,7 +406,7 @@ def main() -> int:
         show_action.triggered.connect(show_overlay)
         hide_action.triggered.connect(hide_overlay)
         settings_action.triggered.connect(open_settings)
-        snap_home_action.triggered.connect(overlay.snap_to_home)
+        snap_home_action.triggered.connect(lambda: cinematic.snap_home())
         mode_windows_action.triggered.connect(
             lambda checked: apply_playback_source(WINDOWS_PLAYBACK_SOURCE) if checked else None
         )
@@ -447,6 +458,9 @@ def main() -> int:
         overlay=overlay,
         config=config,
     )
+    cinematic = CinematicManager(overlay, controller, app)
+    if tray_icon is not None:
+        cinematic.modeChanged.connect(cinematic_action.setChecked)
 
     def save_settings(new_config: AppConfig) -> None:
         current_config = controller.config
@@ -457,6 +471,7 @@ def main() -> int:
         overlay.apply_config_theme(saved_config)
         overlay.show_status("Settings saved to .env")
         controller.config = saved_config
+        cinematic.sync_config(saved_config)
         controller.lyrics_repository.set_auto_save_fetched_lrc(saved_config.auto_save_fetched_lrc)
         controller.refresh_album_cover()
         sync_mode_actions(saved_config.playback_source)
@@ -474,6 +489,8 @@ def main() -> int:
             poll_interval_ms=controller.config.poll_interval_ms,
             lrclib_enabled=controller.config.lrclib_enabled,
             lyric_text_color=updated_config.lyric_text_color or controller.config.lyric_text_color,
+            cinematic_enabled=controller.config.cinematic_enabled,
+            cinematic_options=controller.config.cinematic_options,
         )
         save_config(saved_config)
         controller.config = saved_config
@@ -488,6 +505,7 @@ def main() -> int:
 
     def reconnect_spotify() -> None:
         latest = load_config()
+        cinematic.sync_config(latest)
         overlay.load_config_values(latest)
         sync_mode_actions(latest.playback_source)
         sync_overlay_button_actions(latest)
@@ -506,9 +524,10 @@ def main() -> int:
     overlay.reconnect_requested.connect(reconnect_spotify)
     overlay.lyric_color_toggle_requested.connect(toggle_lyric_color)
     overlay.clear_lyrics_cache_requested.connect(clear_downloaded_lyrics)
-    overlay.overlay_hidden.connect(controller.pause_polling)
+    overlay.overlay_hidden.connect(cinematic.pause_if_hidden)
     overlay.overlay_shown.connect(controller.resume_polling)
     app.aboutToQuit.connect(controller.stop)
+    app.aboutToQuit.connect(cinematic.shutdown)
 
     def initialize_spotify() -> None:
         latest = load_config()
@@ -527,7 +546,7 @@ def main() -> int:
     if start_hidden and tray_icon is not None:
         overlay.hide_to_tray()
     else:
-        overlay.show()
+        cinematic.show()
     QTimer.singleShot(0, initialize_spotify)
     return app.exec()
 
