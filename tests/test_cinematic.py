@@ -52,6 +52,8 @@ def test_preferences_validate_corrupt_values():
     assert options["ambient_effect"] == DEFAULTS["ambient_effect"]
     assert options["ambient_intensity"] == 100
     assert decode_options("malformed") == DEFAULTS
+    # Verify aurora fallback to none
+    assert normalize_options({"ambient_effect": "aurora"})["ambient_effect"] == "none"
 
 
 def test_repeated_lyrics_use_index_and_seek_resets_transition(app):
@@ -198,7 +200,8 @@ def test_mode_switch_style_cancel_and_save_preserve_playback_config(app, monkeyp
 def test_ambient_effects_render_and_react_to_lyrics(app):
     from lyric_overlay.cinematic.settings import CinematicSettings
 
-    for effect in ("leaves", "aurora", "stardust"):
+    effects = ("leaves", "snowfall", "rain", "fireflies", "blobs", "stardust")
+    for effect in effects:
         opts = dict(DEFAULTS, background="transparent", ambient_effect=effect, ambient_intensity=75)
         window = CinematicWindow(opts)
         try:
@@ -206,8 +209,8 @@ def test_ambient_effects_render_and_react_to_lyrics(app):
             window.show()
             window.bridge.set_frame(frame(0, 0, text=["Line 1", "Line 2", "Line 3"]))
             QTest.qWait(150)
-            # Advance lyric to trigger gust and pulse
-            window.bridge.set_frame(frame(1, 500, text=["Line 1", "Line 2", "Line 3"]))
+            # Advance lyric to trigger gust and pulse and tempo scaling
+            window.bridge.set_frame(dict(frame(1, 500, text=["Line 1", "Line 2", "Line 3"]), remaining=1500))
             QTest.qWait(150)
             image = window.grabWindow()
             assert not image.isNull()
@@ -219,8 +222,8 @@ def test_ambient_effects_render_and_react_to_lyrics(app):
 
     # Verify settings dialog updates ambient_effect and ambient_intensity
     settings = CinematicSettings(DEFAULTS)
-    settings.update_option("ambient_effect", "leaves")
-    assert settings.options["ambient_effect"] == "leaves"
+    settings.update_option("ambient_effect", "snowfall")
+    assert settings.options["ambient_effect"] == "snowfall"
     settings.update_option("ambient_intensity", 80)
     assert settings.options["ambient_intensity"] == 80
     settings.deleteLater()

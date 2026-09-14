@@ -65,6 +65,7 @@ Item {
         property real gust: 0.0
         property real pulse: 0.0
         property int lastIndex: -100
+        property real tempoScale: 1.0
 
         NumberAnimation {
             id: gustAnim
@@ -72,7 +73,7 @@ Item {
             property: "gust"
             from: 1.0
             to: 0.0
-            duration: 850
+            duration: 750
             easing.type: Easing.OutCubic
         }
 
@@ -82,293 +83,584 @@ Item {
             property: "pulse"
             from: 1.0
             to: 0.0
-            duration: 1000
+            duration: 900
             easing.type: Easing.OutQuad
         }
 
         function onLyricTrigger() {
             gustAnim.restart()
             pulseAnim.restart()
+            // Discrete tempo adjustment per lyric line (NO per-frame binding churn)
+            if (root.state.playing && root.state.remaining && root.state.remaining > 0) {
+                var rem = Number(root.state.remaining)
+                var factor = 3000.0 / Math.max(1500.0, Math.min(5000.0, rem))
+                ambientLayer.tempoScale = Math.max(0.75, Math.min(1.35, factor))
+            } else {
+                ambientLayer.tempoScale = 1.0
+            }
+        }
+
+        // Dedicated Loader: Only the active effect is kept in memory and rendered.
+        Loader {
+            id: effectLoader
+            anchors.fill: parent
+            asynchronous: false
+            sourceComponent: {
+                var eff = opts.ambient_effect || "none"
+                if (eff === "leaves") return leavesComp
+                if (eff === "snowfall") return snowfallComp
+                if (eff === "rain") return rainComp
+                if (eff === "fireflies") return firefliesComp
+                if (eff === "blobs") return blobsComp
+                if (eff === "stardust") return stardustComp
+                return null
+            }
         }
 
         // 1. Leaves Effect (Drifting leaves/sakura with wind sway & tumble)
-        Item {
-            id: leavesLayer
-            anchors.fill: parent
-            visible: opts.ambient_effect === "leaves"
+        Component {
+            id: leavesComp
+            Item {
+                anchors.fill: parent
+                x: ambientLayer.gust * 32
 
-            Repeater {
-                model: 16
-                Item {
-                    id: leafItem
-                    readonly property real startX: (index * 47) % Math.max(100, ambientLayer.width)
-                    readonly property real fallDuration: 4200 + (index * 430) % 2800
-                    readonly property real swayAmp: 22 + (index * 7) % 24
-                    readonly property real swayDuration: 1800 + (index * 320) % 1400
-                    readonly property real leafWidth: 16 + (index % 4) * 3
-                    readonly property real leafHeight: 9 + (index % 3) * 2
-                    readonly property var leafColors: ["#D4813B", "#C05646", "#E5A05D", "#D97D64", "#C66D42", "#E8B365"]
-                    readonly property color leafColor: leafColors[index % leafColors.length]
-                    readonly property real baseAlpha: 0.45 + (index % 4) * 0.12
+                Repeater {
+                    model: 16
+                    Item {
+                        id: leafItem
+                        readonly property real startX: (index * 47) % Math.max(100, ambientLayer.width)
+                        readonly property real fallDuration: Math.max(1600, (4200 + (index * 430) % 2800) / ambientLayer.tempoScale)
+                        readonly property real swayAmp: 22 + (index * 7) % 24
+                        readonly property real swayDuration: Math.max(900, (1800 + (index * 320) % 1400) / ambientLayer.tempoScale)
+                        readonly property real leafWidth: 16 + (index % 4) * 3
+                        readonly property real leafHeight: 9 + (index % 3) * 2
+                        readonly property var leafColors: [cinematic.albumColor, opts.glow_color, "#D4813B", "#C05646", "#E5A05D", "#D97D64", "#C66D42", "#E8B365"]
+                        readonly property color leafColor: leafColors[index % leafColors.length]
+                        readonly property real baseAlpha: 0.45 + (index % 4) * 0.12
 
-                    width: leafWidth
-                    height: leafHeight
+                        width: leafWidth
+                        height: leafHeight
 
-                    Rectangle {
-                        anchors.fill: parent
-                        color: leafItem.leafColor
-                        topLeftRadius: parent.width * 0.75
-                        bottomRightRadius: parent.width * 0.75
-                        topRightRadius: 2
-                        bottomLeftRadius: 2
+                        Rectangle {
+                            anchors.fill: parent
+                            color: leafItem.leafColor
+                            topLeftRadius: parent.width * 0.75
+                            bottomRightRadius: parent.width * 0.75
+                            topRightRadius: 2
+                            bottomLeftRadius: 2
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: parent.width * 0.7
+                                height: 1
+                                color: "#50FFFFFF"
+                                rotation: 12
+                            }
+                        }
+
+                        NumberAnimation on y {
+                            from: -30
+                            to: ambientLayer.height + 30
+                            duration: leafItem.fallDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: leafItem.startX + leafItem.swayAmp
+                                duration: leafItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: leafItem.startX - leafItem.swayAmp
+                                duration: leafItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+
+                        SequentialAnimation on rotation {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: 35; duration: leafItem.swayDuration; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: -35; duration: leafItem.swayDuration; easing.type: Easing.InOutSine }
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: leafItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: leafItem.fallDuration * 0.18
+                                easing.type: Easing.OutQuad
+                            }
+                            PauseAnimation {
+                                duration: leafItem.fallDuration * 0.64
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: leafItem.fallDuration * 0.18
+                                easing.type: Easing.InQuad
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Winter Snowfall Effect (Soft floating flakes with gentle breeze)
+        Component {
+            id: snowfallComp
+            Item {
+                anchors.fill: parent
+                x: ambientLayer.gust * 24
+
+                Repeater {
+                    model: 16
+                    Item {
+                        id: snowItem
+                        readonly property real startX: (index * 47) % Math.max(100, ambientLayer.width)
+                        readonly property real fallDuration: Math.max(1800, (4600 + (index * 370) % 3000) / ambientLayer.tempoScale)
+                        readonly property real swayAmp: 14 + (index * 5) % 18
+                        readonly property real swayDuration: Math.max(1000, (2200 + (index * 290) % 1500) / ambientLayer.tempoScale)
+                        readonly property real snowSize: 3.5 + (index % 4) * 1.4
+                        readonly property real baseAlpha: 0.36 + (index % 4) * 0.15
+                        readonly property color flakeColor: (index % 4 === 0) ? opts.glow_color : ((index % 4 === 1) ? opts.active_color : "#FFFFFF")
+
+                        width: snowSize * 2.5
+                        height: snowSize * 2.5
+
                         Rectangle {
                             anchors.centerIn: parent
-                            width: parent.width * 0.7
-                            height: 1
-                            color: "#50FFFFFF"
-                            rotation: 12
+                            width: parent.width
+                            height: parent.height
+                            radius: width / 2
+                            color: Qt.alpha(snowItem.flakeColor, 0.22)
                         }
-                    }
 
-                    NumberAnimation on y {
-                        from: -30
-                        to: ambientLayer.height + 30
-                        duration: leafItem.fallDuration
-                        loops: Animation.Infinite
-                        running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "leaves") && root.state.playing
-                    }
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: snowItem.snowSize
+                            height: snowItem.snowSize
+                            radius: width / 2
+                            color: Qt.alpha("#FFFFFF", 0.92)
+                        }
 
-                    SequentialAnimation on x {
-                        loops: Animation.Infinite
-                        running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "leaves") && root.state.playing
-                        NumberAnimation {
-                            to: leafItem.startX + leafItem.swayAmp + ambientLayer.gust * 40
-                            duration: leafItem.swayDuration
-                            easing.type: Easing.InOutSine
+                        NumberAnimation on y {
+                            from: -20
+                            to: ambientLayer.height + 20
+                            duration: snowItem.fallDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
                         }
-                        NumberAnimation {
-                            to: leafItem.startX - leafItem.swayAmp + ambientLayer.gust * 20
-                            duration: leafItem.swayDuration
-                            easing.type: Easing.InOutSine
-                        }
-                    }
 
-                    SequentialAnimation on rotation {
-                        loops: Animation.Infinite
-                        running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "leaves") && root.state.playing
-                        NumberAnimation { to: 35; duration: leafItem.swayDuration; easing.type: Easing.InOutSine }
-                        NumberAnimation { to: -35; duration: leafItem.swayDuration; easing.type: Easing.InOutSine }
-                    }
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: snowItem.startX + snowItem.swayAmp
+                                duration: snowItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: snowItem.startX - snowItem.swayAmp
+                                duration: snowItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                        }
 
-                    SequentialAnimation on opacity {
-                        loops: Animation.Infinite
-                        running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "leaves") && root.state.playing
-                        NumberAnimation {
-                            from: 0
-                            to: leafItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
-                            duration: leafItem.fallDuration * 0.18
-                            easing.type: Easing.OutQuad
-                        }
-                        PauseAnimation {
-                            duration: leafItem.fallDuration * 0.64
-                        }
-                        NumberAnimation {
-                            to: 0
-                            duration: leafItem.fallDuration * 0.18
-                            easing.type: Easing.InQuad
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: snowItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: snowItem.fallDuration * 0.15
+                                easing.type: Easing.OutQuad
+                            }
+                            PauseAnimation {
+                                duration: snowItem.fallDuration * 0.70
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: snowItem.fallDuration * 0.15
+                                easing.type: Easing.InQuad
+                            }
                         }
                     }
                 }
             }
         }
 
-        // 2. Aurora Waves Effect (Ethereal flowing luminous ribbons)
-        Item {
-            id: auroraLayer
-            anchors.fill: parent
-            visible: opts.ambient_effect === "aurora"
+        // 3. Gentle Rain & Mist Effect (Delicate diagonal streaks with misty bottom)
+        Component {
+            id: rainComp
+            Item {
+                anchors.fill: parent
+                x: ambientLayer.gust * 20
+                rotation: ambientLayer.gust * 6
 
-            Rectangle {
-                id: auroraWave1
-                width: parent.width * 1.4
-                height: Math.max(140, parent.height * 0.5)
-                x: -parent.width * 0.2
-                y: parent.height * 0.15
-                radius: height * 0.5
-                rotation: -6
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.35; color: Qt.alpha(cinematic.albumColor, (0.24 + ambientLayer.pulse * 0.14) * ((opts.ambient_intensity || 50) / 100)) }
-                    GradientStop { position: 0.70; color: Qt.alpha(opts.glow_color, (0.20 + ambientLayer.pulse * 0.10) * ((opts.ambient_intensity || 50) / 100)) }
-                    GradientStop { position: 1.0; color: "transparent" }
+                // Ground mist (pure geometry gradient, zero shader overhead)
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: Math.max(50, parent.height * 0.24)
+                    opacity: (0.16 + ambientLayer.pulse * 0.14) * ((opts.ambient_intensity || 50) / 100)
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "transparent" }
+                        GradientStop { position: 0.7; color: Qt.alpha(cinematic.albumColor, 0.22) }
+                        GradientStop { position: 1.0; color: Qt.alpha(opts.glow_color, 0.32) }
+                    }
                 }
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blur: 1.0
-                    blurMax: 48
-                }
-                SequentialAnimation on x {
-                    loops: Animation.Infinite
-                    running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "aurora") && root.state.playing
-                    NumberAnimation { to: -auroraLayer.width * 0.10; duration: 11000; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: -auroraLayer.width * 0.25; duration: 11000; easing.type: Easing.InOutSine }
-                }
-                SequentialAnimation on rotation {
-                    loops: Animation.Infinite
-                    running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "aurora") && root.state.playing
-                    NumberAnimation { to: 4; duration: 13000; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: -6; duration: 13000; easing.type: Easing.InOutSine }
-                }
-            }
 
-            Rectangle {
-                id: auroraWave2
-                width: parent.width * 1.3
-                height: Math.max(120, parent.height * 0.42)
-                x: -parent.width * 0.15
-                y: parent.height * 0.42
-                radius: height * 0.5
-                rotation: 5
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.30; color: Qt.alpha(opts.active_color, (0.14 + ambientLayer.pulse * 0.08) * ((opts.ambient_intensity || 50) / 100)) }
-                    GradientStop { position: 0.65; color: Qt.alpha(cinematic.albumColor, (0.22 + ambientLayer.pulse * 0.12) * ((opts.ambient_intensity || 50) / 100)) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blur: 1.0
-                    blurMax: 48
-                }
-                SequentialAnimation on x {
-                    loops: Animation.Infinite
-                    running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "aurora") && root.state.playing
-                    NumberAnimation { to: -auroraLayer.width * 0.22; duration: 9000; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: -auroraLayer.width * 0.10; duration: 9000; easing.type: Easing.InOutSine }
-                }
-                SequentialAnimation on rotation {
-                    loops: Animation.Infinite
-                    running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "aurora") && root.state.playing
-                    NumberAnimation { to: -3; duration: 10000; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: 5; duration: 10000; easing.type: Easing.InOutSine }
-                }
-            }
+                Repeater {
+                    model: 18
+                    Item {
+                        id: rainItem
+                        readonly property real startX: (index * 43) % Math.max(100, ambientLayer.width)
+                        readonly property real fallDuration: Math.max(500, (850 + (index * 95) % 600) / ambientLayer.tempoScale)
+                        readonly property real dropWidth: 1.5 + (index % 3) * 0.4
+                        readonly property real dropHeight: 20 + (index % 4) * 6
+                        readonly property real baseAlpha: 0.32 + (index % 3) * 0.14
+                        readonly property color dropColor: (index % 3 === 0) ? Qt.alpha(opts.glow_color, 0.75) : ((index % 3 === 1) ? Qt.alpha(cinematic.albumColor, 0.75) : "#90BEE3FF")
 
-            Rectangle {
-                id: lyricGlowPulse
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: (parent.height / 2) - height / 2
-                width: Math.min(parent.width * 0.85, root.textWidth * 1.4)
-                height: Math.max(70, root.activeHeight * 2.0)
-                radius: height / 2
-                opacity: ambientLayer.pulse * ((opts.ambient_intensity || 50) / 100) * 0.40
-                scale: 0.92 + ambientLayer.pulse * 0.12
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.5; color: Qt.alpha(cinematic.albumColor, 0.35) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blur: 0.9
-                    blurMax: 36
+                        x: rainItem.startX
+                        width: dropWidth
+                        height: dropHeight
+                        rotation: 14
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.width / 2
+                            color: rainItem.dropColor
+                        }
+
+                        NumberAnimation on y {
+                            from: -40
+                            to: ambientLayer.height + 40
+                            duration: rainItem.fallDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: rainItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: rainItem.fallDuration * 0.12
+                            }
+                            PauseAnimation {
+                                duration: rainItem.fallDuration * 0.76
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: rainItem.fallDuration * 0.12
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // 3. Stardust Effect (Glowing embers & shimmering dust particles)
-        Item {
-            id: stardustLayer
-            anchors.fill: parent
-            visible: opts.ambient_effect === "stardust"
+        // 4. Fireflies / Forest Embers Effect (Warm wandering bioluminescent motes)
+        Component {
+            id: firefliesComp
+            Item {
+                anchors.fill: parent
+                x: ambientLayer.gust * 15
 
-            Repeater {
-                model: 20
+                Repeater {
+                    model: 14
+                    Item {
+                        id: fireflyItem
+                        readonly property real startX: (index * 53) % Math.max(100, ambientLayer.width)
+                        readonly property real floatDuration: Math.max(2500, (6200 + (index * 480) % 3200) / ambientLayer.tempoScale)
+                        readonly property real wanderAmp: 22 + (index * 7) % 28
+                        readonly property real wanderDuration: Math.max(1200, (2500 + (index * 380) % 1700) / ambientLayer.tempoScale)
+                        readonly property real fireflySize: 4.0 + (index % 3) * 1.5
+                        readonly property real baseAlpha: 0.48 + (index % 3) * 0.20
+                        readonly property var fireflyColors: ["#FFE270", "#FFD152", "#98EE64", "#B8F97A", opts.glow_color, cinematic.albumColor]
+                        readonly property color fireflyColor: fireflyColors[index % fireflyColors.length]
+
+                        width: fireflySize * 3.0
+                        height: fireflySize * 3.0
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width
+                            height: parent.height
+                            radius: width / 2
+                            color: Qt.alpha(fireflyItem.fireflyColor, 0.26)
+                            scale: 1.0 + ambientLayer.pulse * 0.40
+                        }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: fireflyItem.fireflySize
+                            height: fireflyItem.fireflySize
+                            radius: width / 2
+                            color: (index % 2 === 0) ? "#FFFFFF" : fireflyItem.fireflyColor
+                        }
+
+                        NumberAnimation on y {
+                            from: ambientLayer.height + 25
+                            to: -25
+                            duration: fireflyItem.floatDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: fireflyItem.startX + fireflyItem.wanderAmp
+                                duration: fireflyItem.wanderDuration
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: fireflyItem.startX - fireflyItem.wanderAmp
+                                duration: fireflyItem.wanderDuration * 1.15
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: fireflyItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: fireflyItem.floatDuration * 0.15
+                                easing.type: Easing.OutQuad
+                            }
+                            SequentialAnimation {
+                                loops: 2
+                                NumberAnimation {
+                                    to: Math.min(1.0, fireflyItem.baseAlpha * 1.5) * ((opts.ambient_intensity || 50) / 100)
+                                    duration: fireflyItem.wanderDuration * 0.4
+                                    easing.type: Easing.InOutSine
+                                }
+                                NumberAnimation {
+                                    to: Math.max(0.12, fireflyItem.baseAlpha * 0.45) * ((opts.ambient_intensity || 50) / 100)
+                                    duration: fireflyItem.wanderDuration * 0.4
+                                    easing.type: Easing.InOutSine
+                                }
+                            }
+                            PauseAnimation {
+                                duration: Math.max(0, fireflyItem.floatDuration * 0.70 - fireflyItem.wanderDuration * 1.6)
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: fireflyItem.floatDuration * 0.15
+                                easing.type: Easing.InQuad
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Fluid Lava / Color Blobs Effect (Single-pass shared blur for fluid blending)
+        Component {
+            id: blobsComp
+            Item {
+                anchors.fill: parent
+
                 Item {
-                    id: starItem
-                    readonly property real startX: (index * 59) % Math.max(100, ambientLayer.width)
-                    readonly property real floatDuration: 4000 + (index * 350) % 3000
-                    readonly property real swayAmp: 14 + (index * 3) % 18
-                    readonly property real swayDuration: 1500 + (index * 260) % 1200
-                    readonly property real baseSize: 3 + (index % 4) * 1.2
-                    readonly property real baseAlpha: 0.45 + (index % 3) * 0.18
+                    anchors.fill: parent
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blur: 0.70
+                        blurMax: 20
+                    }
 
-                    width: baseSize * 3
-                    height: baseSize * 3
-
+                    // Blob 1: Album color orb
                     Rectangle {
-                        anchors.centerIn: parent
-                        width: parent.baseSize * 2.8
-                        height: parent.baseSize * 2.8
+                        width: Math.max(180, parent.width * 0.45)
+                        height: width
                         radius: width / 2
-                        color: Qt.alpha(opts.glow_color, 0.3)
+                        x: parent.width * 0.1
+                        y: parent.height * 0.1
+                        color: Qt.alpha(cinematic.albumColor, (0.28 + ambientLayer.pulse * 0.12) * ((opts.ambient_intensity || 50) / 100))
+                        scale: 0.95 + ambientLayer.pulse * 0.14
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: ambientLayer.width * 0.55; duration: 13000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: ambientLayer.width * 0.05; duration: 13000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                        }
+                        SequentialAnimation on y {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: ambientLayer.height * 0.45; duration: 16000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: ambientLayer.height * 0.10; duration: 16000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                        }
                     }
+
+                    // Blob 2: Glow color orb
                     Rectangle {
-                        anchors.centerIn: parent
-                        width: parent.baseSize
-                        height: parent.baseSize
+                        width: Math.max(160, parent.width * 0.40)
+                        height: width
                         radius: width / 2
-                        color: (index % 3 === 0) ? "#FFFFFF" : opts.active_color
-                    }
+                        x: parent.width * 0.5
+                        y: parent.height * 0.4
+                        color: Qt.alpha(opts.glow_color, (0.22 + ambientLayer.pulse * 0.10) * ((opts.ambient_intensity || 50) / 100))
+                        scale: 0.92 + ambientLayer.pulse * 0.12
 
-                    NumberAnimation on y {
-                        from: ambientLayer.height + 20
-                        to: -20
-                        duration: starItem.floatDuration
-                        loops: Animation.Infinite
-                        running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "stardust") && root.state.playing
-                    }
-
-                    SequentialAnimation on x {
-                        loops: Animation.Infinite
-                        running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "stardust") && root.state.playing
-                        NumberAnimation {
-                            to: starItem.startX + starItem.swayAmp
-                            duration: starItem.swayDuration
-                            easing.type: Easing.InOutSine
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: ambientLayer.width * 0.15; duration: 15000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: ambientLayer.width * 0.60; duration: 15000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
                         }
-                        NumberAnimation {
-                            to: starItem.startX - starItem.swayAmp
-                            duration: starItem.swayDuration
-                            easing.type: Easing.InOutSine
+                        SequentialAnimation on y {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: ambientLayer.height * 0.10; duration: 14000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: ambientLayer.height * 0.50; duration: 14000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
                         }
                     }
 
-                    SequentialAnimation on opacity {
-                        loops: Animation.Infinite
-                        running: root.Window.window && root.Window.window.visible && (opts.ambient_effect === "stardust") && root.state.playing
-                        NumberAnimation {
-                            from: 0
-                            to: starItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
-                            duration: starItem.floatDuration * 0.16
-                            easing.type: Easing.OutQuad
+                    // Blob 3: Active lyric tint orb
+                    Rectangle {
+                        width: Math.max(150, parent.width * 0.36)
+                        height: width
+                        radius: width / 2
+                        x: parent.width * 0.3
+                        y: parent.height * 0.6
+                        color: Qt.alpha(opts.active_color, (0.16 + ambientLayer.pulse * 0.08) * ((opts.ambient_intensity || 50) / 100))
+                        scale: 0.90 + ambientLayer.pulse * 0.10
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: ambientLayer.width * 0.40; duration: 11000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: ambientLayer.width * 0.20; duration: 11000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
                         }
-                        SequentialAnimation {
-                            loops: 2
+                        SequentialAnimation on y {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: ambientLayer.height * 0.20; duration: 12000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: ambientLayer.height * 0.65; duration: 12000 / ambientLayer.tempoScale; easing.type: Easing.InOutSine }
+                        }
+                    }
+                }
+
+                // Lyric Backing Glow (sibling, so it doesn't dirty or add to the FBO blur pass)
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: (parent.height / 2) - height / 2
+                    width: Math.min(parent.width * 0.85, root.textWidth * 1.4)
+                    height: Math.max(70, root.activeHeight * 2.0)
+                    radius: height / 2
+                    opacity: ambientLayer.pulse * ((opts.ambient_intensity || 50) / 100) * 0.36
+                    scale: 0.94 + ambientLayer.pulse * 0.10
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "transparent" }
+                        GradientStop { position: 0.5; color: Qt.alpha(cinematic.albumColor, 0.32) }
+                        GradientStop { position: 1.0; color: "transparent" }
+                    }
+                }
+            }
+        }
+
+        // 6. Stardust Effect (Glowing embers & shimmering dust particles)
+        Component {
+            id: stardustComp
+            Item {
+                anchors.fill: parent
+
+                Repeater {
+                    model: 16
+                    Item {
+                        id: starItem
+                        readonly property real startX: (index * 59) % Math.max(100, ambientLayer.width)
+                        readonly property real floatDuration: Math.max(1500, (4000 + (index * 350) % 3000) / ambientLayer.tempoScale)
+                        readonly property real swayAmp: 14 + (index * 3) % 18
+                        readonly property real swayDuration: Math.max(800, (1500 + (index * 260) % 1200) / ambientLayer.tempoScale)
+                        readonly property real baseSize: 3 + (index % 4) * 1.2
+                        readonly property real baseAlpha: 0.45 + (index % 3) * 0.18
+
+                        width: baseSize * 3
+                        height: baseSize * 3
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.baseSize * 2.8
+                            height: parent.baseSize * 2.8
+                            radius: width / 2
+                            color: Qt.alpha((index % 3 === 0) ? cinematic.albumColor : opts.glow_color, 0.3)
+                        }
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.baseSize
+                            height: parent.baseSize
+                            radius: width / 2
+                            color: (index % 4 === 0) ? cinematic.albumColor : ((index % 4 === 1) ? "#FFFFFF" : opts.active_color)
+                        }
+
+                        NumberAnimation on y {
+                            from: ambientLayer.height + 20
+                            to: -20
+                            duration: starItem.floatDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
                             NumberAnimation {
-                                to: Math.min(1.0, starItem.baseAlpha * 1.4) * ((opts.ambient_intensity || 50) / 100)
-                                duration: starItem.swayDuration * 0.5
+                                to: starItem.startX + starItem.swayAmp
+                                duration: starItem.swayDuration
                                 easing.type: Easing.InOutSine
                             }
                             NumberAnimation {
-                                to: Math.max(0.15, starItem.baseAlpha * 0.6) * ((opts.ambient_intensity || 50) / 100)
-                                duration: starItem.swayDuration * 0.5
+                                to: starItem.startX - starItem.swayAmp
+                                duration: starItem.swayDuration
                                 easing.type: Easing.InOutSine
                             }
                         }
-                        PauseAnimation {
-                            duration: Math.max(0, starItem.floatDuration * 0.68 - starItem.swayDuration * 2)
-                        }
-                        NumberAnimation {
-                            to: 0
-                            duration: starItem.floatDuration * 0.16
-                            easing.type: Easing.InQuad
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: starItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: starItem.floatDuration * 0.16
+                                easing.type: Easing.OutQuad
+                            }
+                            SequentialAnimation {
+                                loops: 2
+                                NumberAnimation {
+                                    to: Math.min(1.0, starItem.baseAlpha * 1.4) * ((opts.ambient_intensity || 50) / 100)
+                                    duration: starItem.swayDuration * 0.5
+                                    easing.type: Easing.InOutSine
+                                }
+                                NumberAnimation {
+                                    to: Math.max(0.15, starItem.baseAlpha * 0.6) * ((opts.ambient_intensity || 50) / 100)
+                                    duration: starItem.swayDuration * 0.5
+                                    easing.type: Easing.InOutSine
+                                }
+                            }
+                            PauseAnimation {
+                                duration: Math.max(0, starItem.floatDuration * 0.68 - starItem.swayDuration * 2)
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: starItem.floatDuration * 0.16
+                                easing.type: Easing.InQuad
+                            }
                         }
                     }
                 }

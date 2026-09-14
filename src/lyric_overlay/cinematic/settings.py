@@ -26,6 +26,18 @@ LABELS = {
     "ambient_effect": "Ambient effect", "ambient_intensity": "Ambient intensity (%)",
 }
 
+CHOICE_LABELS = {
+    "ambient_effect": {
+        "none": "None",
+        "leaves": "Autumn Leaves",
+        "snowfall": "Winter Snowfall",
+        "rain": "Gentle Rain",
+        "fireflies": "Fireflies",
+        "blobs": "Fluid Color Blobs",
+        "stardust": "Stardust",
+    },
+}
+
 
 class CinematicSettings(QDialog):
     preview = Signal(object)
@@ -62,8 +74,9 @@ class CinematicSettings(QDialog):
                 control.valueChanged.connect(lambda number, k=key: self.update_option(k, number))
             elif key in CHOICES:
                 control = QComboBox()
+                labels = CHOICE_LABELS.get(key, {})
                 for choice in CHOICES[key]:
-                    control.addItem(choice.title(), choice)
+                    control.addItem(labels.get(choice, choice.title()), choice)
                 control.setCurrentIndex(control.findData(value))
                 control.currentIndexChanged.connect(lambda index, k=key, c=control: self.update_option(k, c.itemData(index)))
             else:

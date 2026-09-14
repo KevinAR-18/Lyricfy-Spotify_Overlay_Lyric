@@ -24,7 +24,7 @@ RANGES = {
 CHOICES = {
     "alignment": ("left", "center", "right"),
     "background": ("transparent", "solid", "gradient", "album"),
-    "ambient_effect": ("none", "leaves", "aurora", "stardust"),
+    "ambient_effect": ("none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"),
 }
 
 
