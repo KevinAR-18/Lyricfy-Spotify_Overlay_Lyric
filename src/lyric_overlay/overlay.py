@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 import time
 
+from .animated_lyric import AnimatedLyricLabel
+
 from PySide6.QtCore import QObject, QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -300,7 +302,7 @@ class OverlayWindow(QWidget):
         self.close_button.setToolTip("Hide Overlay")
         self.close_button.clicked.connect(self.request_close)
 
-        self.compact_label = QLabel("Spotify is not playing")
+        self.compact_label = AnimatedLyricLabel("Spotify is not playing")
         self.compact_label.setFont(QFont("Segoe UI Semibold", 11))
         self.compact_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.compact_label.setMinimumWidth(500)
@@ -518,7 +520,7 @@ class OverlayWindow(QWidget):
         self._compact_text_layout.setContentsMargins(0, 0, 0, 0)
         self._compact_text_layout.setSpacing(0)
         self._compact_text_layout.addLayout(self._header_layout)
-        self.next_line_label = QLabel("")
+        self.next_line_label = AnimatedLyricLabel("")
         self.next_line_label.setObjectName("nextLyric")
         self.next_line_label.setWordWrap(True)
         self.next_line_label.hide()
@@ -1156,6 +1158,8 @@ class OverlayWindow(QWidget):
         normalized_source = (lyrics_source or "").strip().lower()
         self._lyrics_available = bool(normalized_source) and normalized_source not in {"none", "loading"}
         if track is None:
+            self.compact_label.finish_transition()
+            self.next_line_label.finish_transition()
             self._track_text = "Spotify is not playing"
             self._artist_text = "Waiting for playback"
             self._current_line_text = ""
@@ -1180,6 +1184,8 @@ class OverlayWindow(QWidget):
             or self._artist_text != previous_artist
             or not self._lyrics_available
         ):
+            self.compact_label.finish_transition()
+            self.next_line_label.finish_transition()
             self._current_line_text = ""
             self._next_line_text = ""
         if self._lyrics_available and (
@@ -1197,7 +1203,15 @@ class OverlayWindow(QWidget):
             previous_header_visible,
         )
 
-    def set_lines(self, current_line: str, next_line: str) -> None:
+    def set_lines(self, current_line: str, next_line: str, *, transition_ms: int | None = None) -> None:
+        changed = (current_line.strip(), next_line.strip()) != (self._current_line_text, self._next_line_text)
+        duration = (240 if changed else 0) if transition_ms is None else transition_ms
+        animate = duration > 0 and self.isVisible() and not self._expanded and bool(self._current_line_text)
+        labels = (self.compact_label, self.next_line_label)
+        previous = [label.capture_text() for label in labels] if animate else []
+        if transition_ms == 0:
+            for label in labels:
+                label.finish_transition()
         previous_compact_text = self.compact_label.text()
         previous_header_visible = self.track_title_label.isVisible()
         previous_header_text = self.track_title_label.text()
@@ -1211,7 +1225,13 @@ class OverlayWindow(QWidget):
         ):
             self._apply_window_mode_if_needed()
 
+        if animate:
+            for label, image in zip(labels, previous):
+                label.start_transition(image, duration)
+
     def set_paused(self) -> None:
+        self.compact_label.finish_transition()
+        self.next_line_label.finish_transition()
         self._status_text = "Playback paused"
         self.status_label.setText(self._status_text)
         self.status_label.setVisible(True)
@@ -1739,6 +1759,8 @@ class OverlayWindow(QWidget):
             QTimer.singleShot(0, self._restore_visible_above_shell)
 
     def hideEvent(self, event) -> None:  # noqa: N802
+        self.compact_label.finish_transition()
+        self.next_line_label.finish_transition()
         super().hideEvent(event)
         if self._allow_exit or self._hide_requested:
             return

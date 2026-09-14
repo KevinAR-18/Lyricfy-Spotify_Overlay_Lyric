@@ -131,6 +131,8 @@ class AppController(QObject):
         self.cover_worker = CoverArtWorker(CoverArtRepository())
         self._last_track_refresh_at = 0.0
         self._last_rendered_line: tuple[str, str] | None = None
+        self._classic_frame = None
+        self._classic_progress = None
         self._lyrics_request_id = 0
         self._lyrics_retry_count = 0
         self._lyrics_retry_due_at = 0.0
@@ -164,6 +166,8 @@ class AppController(QObject):
         unavailable_message: str | None = None,
     ) -> None:
         self.stop()
+        self._classic_frame = None
+        self._classic_progress = None
         self.playback_client = playback_client
         self.config = config
         self.snapshot = PlaybackSnapshot()
@@ -342,6 +346,8 @@ class AppController(QObject):
         self._render_cinematic_state()
         track = self.snapshot.track
         if track is None:
+            self._classic_frame = None
+            self._classic_progress = None
             return
 
         estimated_progress_ms = self._estimated_progress_ms(track)
@@ -353,11 +359,24 @@ class AppController(QObject):
             next_line.text if next_line else "",
         )
 
-        if rendered_line == self._last_rendered_line:
+        identity = (track.track_id, active_index, track.is_playing)
+        discontinuity = self._classic_progress is not None and (
+            adjusted_progress_ms < self._classic_progress - 200
+            or adjusted_progress_ms > self._classic_progress + 1500
+        )
+        self._classic_progress = adjusted_progress_ms
+        previous_identity = self._classic_frame
+        self._classic_frame = identity
+        if rendered_line == self._last_rendered_line and identity == previous_identity and not discontinuity:
             return
 
+        sequential = (previous_identity is not None and track.is_playing and previous_identity[2]
+                      and previous_identity[0] == track.track_id
+                      and active_index == previous_identity[1] + 1 and not discontinuity)
+        remaining = next_line.timestamp_ms - adjusted_progress_ms if next_line else 1000
+        duration = max(0, min(240, int(remaining * 0.45))) if sequential else 0
         self._last_rendered_line = rendered_line
-        self.overlay.set_lines(*rendered_line)
+        self.overlay.set_lines(*rendered_line, transition_ms=duration)
 
     def _render_cinematic_state(self) -> None:
         track = self.snapshot.track
