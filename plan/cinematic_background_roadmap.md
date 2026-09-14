@@ -8,16 +8,16 @@ Dokumen ini berisi rangkuman arsitektur saat ini dan roadmap pengembangan fitur 
 
 ### Komponen & File Kunci
 * **`src/lyric_overlay/cinematic/Cinematic.qml`**:
-  * Arsitektur: **Declarative SceneGraph Animations** (berjalan pada GPU/C++ SceneGraph thread tanpa per-frame JavaScript loop).
-  * Aman untuk layar *high refresh rate* (120Hz/144Hz/240Hz) dan CPU usage < 1%.
-  * Bebas hard clipping (`clip: false`).
+  * Arsitektur: **Declarative Qt Quick Animations**, tanpa per-frame JavaScript loop; `Loader` hanya memuat efek aktif.
+  * Performa pada layar *high refresh rate* dan penggunaan CPU/GPU perlu diukur pada perangkat target; belum ada jaminan CPU < 1%.
+  * Layer ambient tidak memakai clipping eksplisit; gust menggunakan `Translate` agar tidak berbenturan dengan anchors.
 * **`src/lyric_overlay/cinematic/preferences.py` & `settings.py`**:
   * Opsi persisten di `.env`:
-    * `ambient_effect`: `["none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"]` (Aurora telah dihapus)
+    * `ambient_effect`: `["none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"]` (Aurora telah dihapus; konfigurasi lama `aurora` dinormalisasi menjadi `none`)
     * `ambient_intensity`: `10` – `100%` (mengontrol opasitas & kontras partikel).
 * **Sistem Reaksi Aliran Lirik**:
-  * Trigger: Pergantian baris lirik aktif (`onLyricTrigger` saat `state.index` berubah).
-  * Efek: Hembusan angin (`gustAnim`) dan denyut pendar (`pulseAnim`) berdurasi 850–1000ms.
+  * Trigger: Pergantian baris, pergantian lagu (termasuk indeks yang sama), dan resume playback.
+  * Efek: Hembusan angin (`gustAnim`) berdurasi 750 ms dan denyut pendar (`pulseAnim`) 900 ms; keduanya dihentikan dan direset saat paused.
 * **Edge Fade Bawaan**:
   * Setiap partikel memiliki animasi *fade-in* saat muncul dan *fade-out* sebelum keluar layar secara deklaratif, sehingga tidak ada potongan tajam di tepi jendela.
 * **Windows Media Session Safety (`spotify_client.py`)**:
@@ -41,11 +41,12 @@ Dokumen ini berisi rangkuman arsitektur saat ini dan roadmap pengembangan fitur 
 
 ### Tahap 2: Responsivitas Musik yang Lebih Dinamis (✅ Selesai)
 1. **Tempo-Aware Motion**:
-   * Menghubungkan kecepatan aliran animasi secara halus dengan interval lirik (`state.remaining`):
+   * Kecepatan dihitung dari `state.remaining` saat pergantian baris/lagu dan resume, dibatasi 0,75–1,35; nilai tidak valid atau paused memakai tempo netral 1,0:
      * Lagu bertempo cepat (remaining pendek): Animasi bergerak lebih lincah dan dinamis.
      * Lagu lambat/ballad: Partikel melayang perlahan dan menenangkan.
 2. **Adaptive Color Harmony**:
    * Penyesuaian palet warna partikel secara dinamis mengikuti warna album aktif (`cinematic.albumColor`), `active_color`, dan `glow_color`.
+   * Artwork diminta untuk leaves, rain, fireflies, blobs, dan stardust, termasuk preview dengan background transparan dan cover nonaktif. Snowfall memakai warna style tanpa membutuhkan artwork.
 
 ---
 
@@ -58,4 +59,4 @@ Dokumen ini berisi rangkuman arsitektur saat ini dan roadmap pengembangan fitur 
 ---
 
 ### Tahap 4: Modularitas Kode (Jika Efek Semakin Banyak)
-* Jika varian efek bertambah di atas 5 jenis, pisahkan komponen efek ke file terpisah (misal `LeavesEffect.qml`, `AuroraEffect.qml`) dan pastikan jalur `build.bat` menyertakan seluruh aset QML terkait.
+* Saat ini terdapat enam efek dalam komponen inline yang dimuat melalui `Loader`. Pemisahan ke file tersendiri (misal `LeavesEffect.qml`, `SnowfallEffect.qml`) menjadi tindak lanjut; pastikan jalur `build.bat` menyertakan seluruh aset QML terkait.
