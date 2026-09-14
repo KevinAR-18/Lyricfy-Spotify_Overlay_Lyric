@@ -77,7 +77,7 @@ def test_repeated_lyrics_use_index_and_seek_resets_transition(app):
 
 def test_controller_publishes_repeated_lines_and_paused_state(app):
     class Overlay:
-        def set_lines(self, *lines):
+        def set_lines(self, *lines, **kwargs):
             pass
 
     controller = AppController(None, LyricsRepository(), Overlay(), default_config())
