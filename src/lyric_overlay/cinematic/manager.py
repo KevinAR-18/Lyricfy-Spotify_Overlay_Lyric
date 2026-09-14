@@ -7,7 +7,6 @@ from PySide6.QtGui import QKeySequence, QShortcut
 
 from ..config import save_config
 from .preferences import needs_artwork
-from .settings import CinematicSettings
 from .window import CinematicWindow
 
 
@@ -19,7 +18,6 @@ class CinematicManager(QObject):
         self.overlay = overlay
         self.controller = controller
         self.window = None
-        self.dialog = None
         self.enabled = controller.config.cinematic_enabled
         self._frame = None
         self._artwork = None
@@ -27,6 +25,9 @@ class CinematicManager(QObject):
         controller.cinematic_artwork.connect(self.set_artwork)
         self.shortcut = QShortcut(QKeySequence("Shift+M"), overlay)
         self.shortcut.activated.connect(lambda: self.set_enabled(not self.enabled))
+        overlay.cinematic_preview_requested.connect(self.preview_embedded_style)
+        overlay.settings_closed.connect(self.finish_embedded_settings)
+        overlay.hide_requested.connect(self.hide)
 
     def ensure_window(self):
         if self.window is None:
@@ -57,23 +58,39 @@ class CinematicManager(QObject):
         # Load QML before saving the selection, so a load error cannot strand startup.
         if enabled:
             self.ensure_window()
+        config = replace(self.controller.config, cinematic_enabled=enabled)
+        try:
+            save_config(config)
+        except OSError as exc:
+            self.overlay.show_status(f"Could not save presentation: {exc}")
+            self.modeChanged.emit(self.enabled)
+            return
         self.enabled = enabled
-        self.controller.config = replace(self.controller.config, cinematic_enabled=enabled)
-        save_config(self.controller.config)
+        self.controller.config = config
+        self.overlay.sync_external_preferences(cinematic_enabled=enabled)
         self.modeChanged.emit(enabled)
-        self.show()
+        if self.overlay._expanded:
+            if enabled:
+                self.ensure_window().show_from_tray()
+            elif self.window:
+                self.window.hide()
+            self.overlay.raise_()
+            self.preview_embedded_style(self.overlay.cinematic_editor.options)
+        else:
+            self.show()
         self.controller.refresh_album_cover()
 
     def sync_config(self, config):
         self.enabled = config.cinematic_enabled
-        if self.window is not None and self.dialog is None:
+        if self.window is not None:
             self.window.bridge.set_options(config.cinematic_options)
         self.modeChanged.emit(self.enabled)
 
     def show(self):
         if self.enabled:
             self.ensure_window().show_from_tray()
-            self.overlay.hide_to_tray()
+            if not self.overlay._expanded:
+                self.overlay.hide_to_tray()
         else:
             self.overlay.show_from_tray()
             if self.window:
@@ -81,11 +98,11 @@ class CinematicManager(QObject):
         self.controller.resume_polling()
 
     def hide(self):
+        if self.overlay._expanded:
+            self.overlay.close_settings_panel()
         self.overlay.hide_to_tray()
         if self.window:
             self.window.hide()
-        if self.dialog:
-            self.dialog.reject()
         self.controller.pause_polling()
 
     def pause_if_hidden(self):
@@ -99,16 +116,18 @@ class CinematicManager(QObject):
             self.overlay.snap_to_home()
 
     def open_settings(self):
-        if self.dialog:
-            self.dialog.raise_()
-            self.dialog.activateWindow()
-            return
-        window = self.ensure_window()
-        self.dialog = CinematicSettings(self.controller.config.cinematic_options)
-        self.dialog.preview.connect(self.preview_style)
-        self.dialog.saved.connect(self.save_style)
-        self.dialog.finished.connect(self.finish_settings)
-        self.dialog.show()
+        self.overlay.open_settings_from_tray()
+        self.overlay.settings_tabs.setCurrentIndex(3)
+
+    def preview_embedded_style(self, options):
+        if self.window is not None:
+            self.preview_style(options)
+
+    def finish_embedded_settings(self):
+        self.controller.cinematic_cover_preview = False
+        if self.window:
+            self.window.bridge.set_options(self.controller.config.cinematic_options)
+        self.show()
 
     def preview_style(self, options):
         self.window.bridge.set_options(options)
@@ -118,19 +137,6 @@ class CinematicManager(QObject):
         if changed and needs_cover and not self._artwork:
             self.controller.refresh_album_cover()
 
-    def save_style(self, options):
-        self.controller.config = replace(self.controller.config, cinematic_options=options)
-        save_config(self.controller.config)
-        self.controller.refresh_album_cover()
-
-    def finish_settings(self, result):
-        self.controller.cinematic_cover_preview = False
-        self.window.bridge.set_options(self.controller.config.cinematic_options)
-        self.dialog.deleteLater()
-        self.dialog = None
-
     def shutdown(self):
-        if self.dialog:
-            self.dialog.reject()
         if self.window:
             self.window.hide()

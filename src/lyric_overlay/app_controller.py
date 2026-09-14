@@ -106,6 +106,7 @@ class CoverArtWorker(QObject):
 class AppController(QObject):
     cinematic_frame = Signal(object)
     cinematic_artwork = Signal(object)
+    playback_error = Signal(str)
     _RENDER_INTERVAL_MS = 50
     _MAX_LYRICS_RETRIES = 3
     _LYRICS_RETRY_DELAY_SECONDS = 4.0
@@ -185,7 +186,7 @@ class AppController(QObject):
             self.overlay.set_lines(unavailable_message or primary, secondary)
             return
 
-        self.overlay.show_status("Spotify playback connected")
+        self.overlay.show_status("Playback client ready — waiting for Spotify")
         self.start()
 
     def pause_polling(self) -> None:
@@ -277,6 +278,7 @@ class AppController(QObject):
         self.cinematic_artwork.emit(data)
 
     def show_error(self, message: str) -> None:
+        self.playback_error.emit(self._format_error_message(message))
         self.overlay.show_status(self._format_error_message(message))
 
     def _apply_fetched_lyrics(self, track_id: str, lyrics: LyricsData, request_id: int) -> None:
@@ -374,7 +376,7 @@ class AppController(QObject):
                       and previous_identity[0] == track.track_id
                       and active_index == previous_identity[1] + 1 and not discontinuity)
         remaining = next_line.timestamp_ms - adjusted_progress_ms if next_line else 1000
-        duration = max(0, min(240, int(remaining * 0.45))) if sequential else 0
+        duration = max(0, min(360, int(remaining * 0.45))) if sequential else 0
         self._last_rendered_line = rendered_line
         self.overlay.set_lines(*rendered_line, transition_ms=duration)
 
