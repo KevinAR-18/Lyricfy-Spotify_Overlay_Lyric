@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSize, Qt, QUrl, Signal
+from PySide6.QtCore import QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtQuick import QQuickView
 
@@ -62,9 +62,6 @@ class CinematicWindow(QQuickView):
         self.hide()
         self.hidden.emit()
 
-    def event(self, event):
-        if event.type() == QEvent.Type.Close:
-            event.ignore()
-            self.hide_to_tray()
-            return True
-        return super().event(event)
+    def closeEvent(self, event):
+        event.ignore()
+        self.hide_to_tray()
