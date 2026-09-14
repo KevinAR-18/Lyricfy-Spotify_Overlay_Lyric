@@ -13,7 +13,7 @@ Dokumen ini berisi rangkuman arsitektur saat ini dan roadmap pengembangan fitur 
   * Bebas hard clipping (`clip: false`).
 * **`src/lyric_overlay/cinematic/preferences.py` & `settings.py`**:
   * Opsi persisten di `.env`:
-    * `ambient_effect`: `["none", "leaves", "aurora", "stardust"]`
+    * `ambient_effect`: `["none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"]` (Aurora telah dihapus)
     * `ambient_intensity`: `10` – `100%` (mengontrol opasitas & kontras partikel).
 * **Sistem Reaksi Aliran Lirik**:
   * Trigger: Pergantian baris lirik aktif (`onLyricTrigger` saat `state.index` berubah).
@@ -25,33 +25,31 @@ Dokumen ini berisi rangkuman arsitektur saat ini dan roadmap pengembangan fitur 
 
 ---
 
-## 2. Roadmap Pengembangan Style Background (Next Sessions)
+## 2. Roadmap Pengembangan Style Background
 
-### Tahap 1: Penambahan Preset Efek Visual Baru
-1. **Winter Snowfall (Salju Melayang)**
+### Tahap 1: Penambahan Preset Efek Visual Baru (✅ Selesai)
+1. **Winter Snowfall (Salju Melayang)** (`snowfall`)
    * Butiran salju halus dengan ukuran acak dan goyangan *sine-wave* lambat.
-   * Sangat cocok untuk mode transparan pada lagu akustik, lo-fi, atau ballad.
-2. **Gentle Rain & Mist (Hujan Rintik Halus)**
-   * Garis-garis rintik tipis transparan diagonal dengan hembusan angin saat pergantian bait.
-3. **Fireflies / Forest Embers (Kunang-Kunang Hutan)**
+2. **Gentle Rain & Mist (Hujan Rintik Halus)** (`rain`)
+   * Garis-garis rintik tipis transparan diagonal dengan hembusan angin saat pergantian bait dan kabut di dasar.
+3. **Fireflies / Forest Embers (Kunang-Kunang Hutan)** (`fireflies`)
    * Partikel cahaya keemasan/hijau neon yang melayang perlahan dengan kedipan berdenyut alami.
-4. **Fluid Lava / Color Blobs (Gelombang Warna Organik)**
-   * Pendaran 2–3 bola cahaya lembut dinamis yang menyatu di belakang lirik (mirip iOS/macOS Dynamic Wallpapers).
+4. **Fluid Lava / Color Blobs (Gelombang Warna Organik)** (`blobs`)
+   * Pendaran bola cahaya dinamis menyatu di belakang lirik yang bereaksi terhadap warna album.
 
 ---
 
-### Tahap 2: Responsivitas Musik yang Lebih Dinamis
+### Tahap 2: Responsivitas Musik yang Lebih Dinamis (✅ Selesai)
 1. **Tempo-Aware Motion**:
-   * Menghubungkan kecepatan aliran animasi dengan interval lirik (`state.remaining`):
-     * Lagu bertempo cepat (rap/pop up-beat): Animasi bergerak lebih lincah dan responsif.
-     * Lagu lambat/ballad: Partikel melayang sangat lambat dan menenangkan.
+   * Menghubungkan kecepatan aliran animasi secara halus dengan interval lirik (`state.remaining`):
+     * Lagu bertempo cepat (remaining pendek): Animasi bergerak lebih lincah dan dinamis.
+     * Lagu lambat/ballad: Partikel melayang perlahan dan menenangkan.
 2. **Adaptive Color Harmony**:
-   * Menyesuaikan palet warna partikel secara dinamis:
-     * Mode Sakura (merah muda) / Autumn (oranye hangat) / Album-Sync (mengikuti `cinematic.albumColor`).
+   * Penyesuaian palet warna partikel secara dinamis mengikuti warna album aktif (`cinematic.albumColor`), `active_color`, dan `glow_color`.
 
 ---
 
-### Tahap 3: Opsi Kustomisasi Tambahan di Menu Style (`Shift+S`)
+### Tahap 3: Opsi Kustomisasi Tambahan di Menu Style (`Shift+S`) (Pending / Next)
 1. **Particle Density (Kerapatan Partikel)**:
    * Pilihan: *Minimalist (8 partikel)*, *Standard (16 partikel)*, *Lush (24 partikel)*.
 2. **Flow Direction (Arah Aliran)**:
