@@ -15,7 +15,6 @@ dist/
 *.exe
 *.ifp
 
-Lyricfy.spec
 *.spotify_cache
 .spotify_cache
 releases/
