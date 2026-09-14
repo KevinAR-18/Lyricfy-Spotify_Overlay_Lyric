@@ -261,3 +261,27 @@ def test_reconnect_failure_keeps_saved_source_and_explains_status(overlay, monke
     assert overlay._expanded
     assert not overlay.apply_button.isEnabled()
     manager.shutdown()
+
+
+def test_font_combobox_popup_width_matches_control(overlay):
+    overlay.toggle_settings()
+    overlay._resize_animation.setCurrentTime(overlay._resize_animation.duration())
+    QTest.qWait(30)
+
+    # Classic font combo in Appearance tab
+    overlay.settings_tabs.setCurrentIndex(2)
+    font_combo = overlay.font_family_input
+    font_combo.showPopup()
+    popup = font_combo.view().window()
+    assert popup.width() == font_combo.width()
+    assert font_combo.view().width() == font_combo.width()
+    font_combo.hidePopup()
+
+    # Cinematic font combo in Cinematic tab
+    overlay.settings_tabs.setCurrentIndex(3)
+    cinematic_font_combo = overlay.cinematic_editor.controls["font_family"]
+    cinematic_font_combo.showPopup()
+    cinematic_popup = cinematic_font_combo.view().window()
+    assert cinematic_popup.width() == cinematic_font_combo.width()
+    assert cinematic_font_combo.view().width() == cinematic_font_combo.width()
+    cinematic_font_combo.hidePopup()
