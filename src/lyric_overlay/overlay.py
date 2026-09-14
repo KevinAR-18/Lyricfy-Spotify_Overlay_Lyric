@@ -7,6 +7,7 @@ from dataclasses import replace
 from urllib.parse import urlparse
 
 from .animated_lyric import AnimatedLyricLabel, LyricTransitionLayer
+from .font_combobox import CompactFontComboBox
 
 from PySide6.QtCore import QObject, QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QShortcut
@@ -371,7 +372,7 @@ class OverlayWindow(QWidget):
         self.startup_visibility_input = QComboBox()
         self.startup_visibility_input.addItem("Show Overlay", False)
         self.startup_visibility_input.addItem("Start Hidden", True)
-        self.font_family_input = QFontComboBox()
+        self.font_family_input = CompactFontComboBox()
         self.font_size_input = QSpinBox()
         self.font_size_input.setRange(8, 48)
         self.font_size_input.setSingleStep(1)

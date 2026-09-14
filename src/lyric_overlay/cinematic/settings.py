@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from ..font_combobox import CompactFontComboBox
 from .preferences import CHOICES, DEFAULTS, RANGES, normalize_options
 
 
@@ -75,7 +76,7 @@ class CinematicEditor(QWidget):
         default = DEFAULTS[key]
         value = self.options[key]
         if key == "font_family":
-            control = QFontComboBox()
+            control = CompactFontComboBox()
             control.setCurrentFont(QFont(value))
             control.currentFontChanged.connect(lambda font, k=key: self.update_option(k, font.family()))
         elif isinstance(default, bool):
