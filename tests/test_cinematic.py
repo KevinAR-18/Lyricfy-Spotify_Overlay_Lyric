@@ -1,7 +1,9 @@
 import pytest
 from dotenv import dotenv_values
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QByteArray, QBuffer, QEvent, QIODevice, QObject, QPointF
+from PySide6.QtGui import QColor, QImage
 from PySide6.QtTest import QTest
+from shiboken6 import isValid
 
 from lyric_overlay import config as config_module
 from lyric_overlay.app_controller import AppController, PlaybackSnapshot
@@ -183,6 +185,16 @@ def test_mode_switch_style_cancel_and_save_preserve_playback_config(app, monkeyp
         assert saved[-1].cinematic_enabled is False
         assert saved[-1].cinematic_options["font_size"] == 42
         manager.set_enabled(True)
+        hidden = []
+        manager.window.hidden.connect(lambda: hidden.append(True))
+        controller._render_timer.start()
+        assert controller._render_timer.isActive()
+        assert manager.window.close() is False  # Close is ignored in favor of hiding to tray.
+        assert hidden == [True]
+        assert not manager.window.isVisible()
+        assert not controller._render_timer.isActive()
+        manager.show()
+        assert manager.window.isVisible()
         manager.hide()
         assert not manager.window.isVisible()
         assert not overlay.isVisible()
@@ -228,4 +240,171 @@ def test_ambient_effects_render_and_react_to_lyrics(app):
     assert settings.options["ambient_intensity"] == 80
     settings.deleteLater()
     app.processEvents()
+
+
+def _artwork(color):
+    image = QImage(8, 8, QImage.Format.Format_RGB32)
+    image.fill(QColor(color))
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    assert image.save(buffer, "PNG")
+    buffer.close()
+    return bytes(data)
+
+
+@pytest.mark.parametrize("effect, expected", [
+    ("none", False), ("snowfall", False), ("leaves", True), ("rain", True),
+    ("fireflies", True), ("blobs", True), ("stardust", True),
+])
+def test_ambient_artwork_required_without_visible_cover(app, effect, expected):
+    config = default_config()
+    config.show_album_cover = False
+    config.cinematic_enabled = True
+    config.cinematic_options = dict(DEFAULTS, ambient_effect=effect)
+    controller = AppController(None, LyricsRepository(), None, config)
+    assert controller._needs_cover() is expected
+    config.cinematic_enabled = False
+    assert controller._needs_cover() is False
+
+
+def test_ambient_artwork_preview_cancel_save_and_late_response(app, monkeypatch):
+    from lyric_overlay.overlay import OverlayWindow
+
+    monkeypatch.setattr(manager_module, "save_config", lambda config: None)
+    overlay = OverlayWindow()
+    config = default_config()
+    config.show_album_cover = False
+    config.cinematic_options = dict(DEFAULTS)
+    controller = AppController(None, LyricsRepository(), overlay, config)
+    controller.snapshot = PlaybackSnapshot(TrackInfo("song", "Song", "Artist", "Album", 5000, 0, True))
+    requests = []
+    monkeypatch.setattr(controller.cover_worker, "fetch", lambda track, request_id: requests.append(request_id))
+    manager = CinematicManager(overlay, controller)
+    try:
+        manager.set_enabled(True)
+        manager.set_frame(frame())
+        assert not requests
+        manager.open_settings()
+        manager.dialog.update_option("ambient_effect", "blobs")
+        assert len(requests) == 1
+        cancelled_request = requests[-1]
+        manager.dialog.reject()
+        assert not controller._needs_cover()
+        controller._apply_fetched_cover("song", _artwork("red"), cancelled_request)
+        assert manager.window.bridge.artwork == ""
+
+        manager.open_settings()
+        manager.dialog.update_option("ambient_effect", "blobs")
+        assert len(requests) == 2
+        # Responses from an older request must not replace the current preview.
+        controller._apply_fetched_cover("song", _artwork("red"), cancelled_request)
+        assert manager.window.bridge.artwork == ""
+        controller._apply_fetched_cover("song", _artwork("red"), requests[-1])
+        app.processEvents()
+        assert manager.window.bridge.artwork
+        assert QColor(manager.window.bridge.albumColor).red() > QColor(manager.window.bridge.albumColor).blue()
+        loader = manager.window.rootObject().findChild(QObject, "ambientEffectLoader")
+        effect_item = loader.property("item")
+        orb = effect_item.findChild(QObject, "albumOrb")
+        assert orb is not None
+        assert orb.property("color").red() > orb.property("color").blue()
+        manager.dialog.save()
+        assert controller.config.cinematic_options["ambient_effect"] == "blobs"
+        assert controller._needs_cover()
+        assert len(requests) == 3
+        controller._apply_fetched_cover("song", _artwork("blue"), requests[-1])
+        app.processEvents()
+        effect_item = loader.property("item")
+        orb = effect_item.findChild(QObject, "albumOrb")
+        assert orb.property("color").blue() > orb.property("color").red()
+    finally:
+        manager.shutdown()
+        controller.stop()
+        if manager.window:
+            manager.window.deleteLater()
+        overlay.hide()
+        overlay.deleteLater()
+        app.processEvents()
+
+
+def test_ambient_tempo_tracks_song_changes_pause_and_resume(app):
+    window = CinematicWindow(dict(DEFAULTS, ambient_effect="leaves"))
+    try:
+        window.show()
+        ambient = window.rootObject().findChild(QObject, "ambientLayer")
+        window.bridge.set_frame(dict(frame(), remaining=5000))
+        assert ambient.property("tempoScale") == pytest.approx(0.75)
+        window.bridge.set_frame(dict(frame(track="new"), remaining=1500))
+        assert ambient.property("tempoScale") == pytest.approx(1.35)
+        window.bridge.set_frame(dict(frame(1, 500, track="new"), remaining=3000))
+        assert ambient.property("tempoScale") == pytest.approx(1)
+        window.bridge.set_frame(dict(frame(1, 550, track="new", playing=False), remaining=3000))
+        assert ambient.property("gust") == 0
+        assert ambient.property("pulse") == 0
+        window.bridge.set_frame(dict(frame(2, 600, track="new", playing=False), remaining=5000))
+        window.bridge.set_frame(dict(frame(2, 650, track="new"), remaining=5000))
+        assert ambient.property("tempoScale") == pytest.approx(0.75)
+        assert ambient.property("gust") > 0
+        # Remaining changes alone must not churn the tempo on each playback tick.
+        window.bridge.set_frame(dict(frame(2, 700, track="new"), remaining=1500))
+        assert ambient.property("tempoScale") == pytest.approx(0.75)
+        for index, remaining in enumerate((0, -100, float("inf"), float("nan")), 3):
+            window.bridge.set_frame(dict(frame(index, 750, track="new"), remaining=remaining))
+            assert ambient.property("tempoScale") == pytest.approx(1)
+    finally:
+        window.hide()
+        window.deleteLater()
+        app.processEvents()
+
+
+@pytest.mark.parametrize("effect", ["leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"])
+def test_effect_loader_renders_replaces_and_unloads_effect(app, effect):
+    options = dict(DEFAULTS, ambient_effect=effect, show_info=False, show_cover=False,
+                   glow_strength=0, ambient_intensity=100)
+    window = CinematicWindow(options)
+    try:
+        window.resize(500, 400)
+        window.show()
+        QTest.qWait(100)
+        window.bridge.set_frame(dict(frame(), rows=[], message=""))
+        root = window.rootObject()
+        ambient = root.findChild(QObject, "ambientLayer")
+        loader = root.findChild(QObject, "ambientEffectLoader")
+        item = loader.property("item")
+        assert item.objectName() == effect
+        if effect in ("leaves", "snowfall", "rain", "fireflies"):
+            # Map rendered coordinates, including transforms (rather than just reading x).
+            assert item.mapToItem(loader, QPointF(0, 0)).x() > 0
+            window.resize(620, 460)
+            QTest.qWait(50)
+            assert item.width() == loader.width()
+            assert item.mapToItem(loader, QPointF(0, 0)).x() > 0
+        QTest.qWait(2500)
+        assert ambient.property("gust") == pytest.approx(0)
+        assert item.mapToItem(loader, QPointF(0, 0)).x() == pytest.approx(0)
+        image = window.grabWindow()
+        assert not image.isNull()
+        # Exclude hover controls at the window edges; only ambient content occupies this area.
+        assert any(image.pixelColor(x, y).alpha() > 0
+                   for y in range(100, image.height() - 70, 2) for x in range(0, image.width(), 2))
+        replacement = "rain" if effect == "blobs" else "blobs"
+        window.bridge.set_options(dict(options, ambient_effect=replacement))
+        app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert not isValid(item)
+        new_item = loader.property("item")
+        assert new_item.objectName() == replacement
+        window.bridge.set_options(dict(options, ambient_effect="none"))
+        app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert not isValid(new_item)
+        assert loader.property("item") is None
+        QTest.qWait(100)
+        empty = window.grabWindow()
+        assert not empty.isNull()
+        assert all(empty.pixelColor(x, y).alpha() == 0
+                   for y in range(100, empty.height() - 70, 2) for x in range(0, empty.width(), 2))
+    finally:
+        window.hide()
+        window.deleteLater()
+        app.processEvents()
 
