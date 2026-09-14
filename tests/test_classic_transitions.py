@@ -25,7 +25,7 @@ def overlay():
     app.processEvents()
 
 
-def test_classic_crossfade_keeps_layout_and_glow_and_settles(overlay):
+def test_classic_swap_promotes_next_block_and_keeps_layout(overlay):
     overlay.set_lines("First line", "Second line", transition_ms=0)
     QTest.qWait(50)
     glow = overlay.compact_label.graphicsEffect()
@@ -33,22 +33,24 @@ def test_classic_crossfade_keeps_layout_and_glow_and_settles(overlay):
     labels = (overlay.compact_label, overlay.next_line_label)
     assert [label.text() for label in labels] == ["Second line", "Third line"]
     positions = [label.pos() for label in labels]
-    for label in labels:
-        assert label._animation.state() == QAbstractAnimation.State.Running
-        label._animation.pause()
-        label._animation.setCurrentTime(120)
-        assert 0 < label._progress < 1
-    middle = overlay.compact_label.capture_text().toImage()
+    layer = overlay._lyric_transition
+    assert layer._animation.state() == QAbstractAnimation.State.Running
+    assert len(layer.blocks) == 3
+    promoted = layer.blocks[1]
+    assert promoted[2].y() > promoted[3].y()
+    assert promoted[4:] == (1.0, 1.0)
+    layer._animation.pause()
+    layer._animation.setCurrentTime(120)
+    assert 0 < layer.progress < 1
+    middle = layer.snapshot()[0][0].toImage()
     assert not middle.isNull()
     assert overlay.compact_label.graphicsEffect() is glow
     assert positions == [label.pos() for label in labels]
-    for label in labels:
-        label._animation.resume()
+    layer._animation.resume()
     QTest.qWait(200)
-    for label in labels:
-        assert label._animation.state() == QAbstractAnimation.State.Stopped
-        assert label._progress == 1
-        assert label._previous.isNull()
+    assert layer._animation.state() == QAbstractAnimation.State.Stopped
+    assert layer.isHidden()
+    assert all(not label.transition_masked for label in labels)
     final = overlay.compact_label.capture_text().toImage()
     assert final != middle
     assert any(final.pixelColor(x, y).alpha() > 0
@@ -62,12 +64,13 @@ def test_classic_rapid_changes_wrapping_pause_and_hide(overlay):
     assert "\n" in overlay.compact_label.text()
     QTest.qWait(40)
     # Retarget a running fade using its current rendered content instead of queuing.
-    snapshot = overlay.compact_label.capture_text().toImage()
+    snapshot = overlay._lyric_transition.snapshot()[0][0].toImage()
     overlay.set_lines("Latest", "End", transition_ms=100)
-    assert overlay.compact_label._previous.toImage() == snapshot
+    assert overlay._lyric_transition.blocks[0][0].toImage() == snapshot
     assert overlay.compact_label.text() == "Latest"
-    assert overlay.compact_label._animation.duration() == 100
+    assert overlay._lyric_transition._animation.duration() == 100
     overlay.set_paused()
+    assert overlay._lyric_transition.isHidden()
     assert overlay.compact_label._progress == 1
     assert overlay.next_line_label._progress == 1
     overlay.set_lines("Resume", "After", transition_ms=240)
@@ -108,7 +111,7 @@ def test_classic_controller_animates_repeated_indices_but_not_seek_or_track_chan
     assert target.updates[-1][1] == 90  # Short lyric interval reduces animation duration.
     track.progress_ms = 1200
     controller._render_current_state()
-    assert target.updates[-1][1] == 240
+    assert target.updates[-1][1] == 360
     track.is_playing = False
     controller._render_current_state()
     assert target.updates[-1][1] == 0

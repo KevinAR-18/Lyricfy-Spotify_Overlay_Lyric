@@ -170,13 +170,20 @@ def test_mode_switch_style_cancel_and_save_preserve_playback_config(app, monkeyp
         assert not overlay.isVisible()
         assert saved[-1].cinematic_enabled is True
         manager.open_settings()
-        manager.dialog.update_option("font_size", 48)
+        assert overlay._expanded
+        assert overlay.settings_tabs.currentIndex() == 3
+        overlay.cinematic_editor.controls["font_size"].setValue(48)
         assert manager.window.bridge.options["font_size"] == 48
-        manager.dialog.reject()
+        overlay.close_settings_panel()
         assert manager.window.bridge.options["font_size"] == DEFAULTS["font_size"]
         manager.open_settings()
-        manager.dialog.update_option("font_size", 42)
-        manager.dialog.save()
+        from lyric_overlay.main import SettingsCoordinator
+        from lyric_overlay import main as main_module
+        monkeypatch.setattr(main_module, "save_config", saved.append)
+        monkeypatch.setattr(main_module, "set_windows_autostart", lambda *args: None)
+        coordinator = SettingsCoordinator(overlay, controller, manager)
+        overlay.cinematic_editor.controls["font_size"].setValue(42)
+        overlay.save_and_close_settings()
         assert saved[-1].cinematic_options["font_size"] == 42
         assert saved[-1].lyric_offset_ms == 350
         manager.set_enabled(False)
@@ -276,26 +283,32 @@ def test_ambient_artwork_preview_cancel_save_and_late_response(app, monkeypatch)
     config = default_config()
     config.show_album_cover = False
     config.cinematic_options = dict(DEFAULTS)
+    overlay.load_config_values(config)
     controller = AppController(None, LyricsRepository(), overlay, config)
     controller.snapshot = PlaybackSnapshot(TrackInfo("song", "Song", "Artist", "Album", 5000, 0, True))
     requests = []
     monkeypatch.setattr(controller.cover_worker, "fetch", lambda track, request_id: requests.append(request_id))
     manager = CinematicManager(overlay, controller)
+    from lyric_overlay.main import SettingsCoordinator
+    from lyric_overlay import main as main_module
+    monkeypatch.setattr(main_module, "save_config", lambda config: None)
+    monkeypatch.setattr(main_module, "set_windows_autostart", lambda *args: None)
+    coordinator = SettingsCoordinator(overlay, controller, manager)
     try:
         manager.set_enabled(True)
         manager.set_frame(frame())
         assert not requests
         manager.open_settings()
-        manager.dialog.update_option("ambient_effect", "blobs")
+        overlay.cinematic_editor.update_option("ambient_effect", "blobs")
         assert len(requests) == 1
         cancelled_request = requests[-1]
-        manager.dialog.reject()
+        overlay.close_settings_panel()
         assert not controller._needs_cover()
         controller._apply_fetched_cover("song", _artwork("red"), cancelled_request)
         assert manager.window.bridge.artwork == ""
 
         manager.open_settings()
-        manager.dialog.update_option("ambient_effect", "blobs")
+        overlay.cinematic_editor.update_option("ambient_effect", "blobs")
         assert len(requests) == 2
         # Responses from an older request must not replace the current preview.
         controller._apply_fetched_cover("song", _artwork("red"), cancelled_request)
@@ -309,7 +322,7 @@ def test_ambient_artwork_preview_cancel_save_and_late_response(app, monkeypatch)
         orb = effect_item.findChild(QObject, "albumOrb")
         assert orb is not None
         assert orb.property("color").red() > orb.property("color").blue()
-        manager.dialog.save()
+        overlay.save_and_close_settings()
         assert controller.config.cinematic_options["ambient_effect"] == "blobs"
         assert controller._needs_cover()
         assert len(requests) == 3
