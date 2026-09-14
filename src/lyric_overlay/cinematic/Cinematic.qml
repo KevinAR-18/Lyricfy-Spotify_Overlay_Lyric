@@ -59,12 +59,14 @@ Item {
     // Ambient Effects Layer (active on transparent AND other backgrounds when ambient_effect !== "none")
     Item {
         id: ambientLayer
+        objectName: "ambientLayer"
         anchors.fill: parent
         visible: (opts.ambient_effect || "none") !== "none"
 
         property real gust: 0.0
         property real pulse: 0.0
         property int lastIndex: -100
+        property bool wasPlaying: false
         property real tempoScale: 1.0
 
         NumberAnimation {
@@ -90,9 +92,19 @@ Item {
         function onLyricTrigger() {
             gustAnim.restart()
             pulseAnim.restart()
-            // Discrete tempo adjustment per lyric line (NO per-frame binding churn)
-            if (root.state.playing && root.state.remaining && root.state.remaining > 0) {
-                var rem = Number(root.state.remaining)
+        }
+
+        function resetReaction() {
+            gustAnim.stop()
+            pulseAnim.stop()
+            gust = 0
+            pulse = 0
+        }
+
+        function updateTempo() {
+            // Sample at line/track changes and resume, not on every playback tick.
+            var rem = Number(root.state.remaining)
+            if (root.state.playing && isFinite(rem) && rem > 0) {
                 var factor = 3000.0 / Math.max(1500.0, Math.min(5000.0, rem))
                 ambientLayer.tempoScale = Math.max(0.75, Math.min(1.35, factor))
             } else {
@@ -103,6 +115,7 @@ Item {
         // Dedicated Loader: Only the active effect is kept in memory and rendered.
         Loader {
             id: effectLoader
+            objectName: "ambientEffectLoader"
             anchors.fill: parent
             asynchronous: false
             sourceComponent: {
@@ -121,8 +134,9 @@ Item {
         Component {
             id: leavesComp
             Item {
+                objectName: "leaves"
                 anchors.fill: parent
-                x: ambientLayer.gust * 32
+                transform: Translate { x: ambientLayer.gust * 32 }
 
                 Repeater {
                     model: 16
@@ -214,8 +228,9 @@ Item {
         Component {
             id: snowfallComp
             Item {
+                objectName: "snowfall"
                 anchors.fill: parent
-                x: ambientLayer.gust * 24
+                transform: Translate { x: ambientLayer.gust * 24 }
 
                 Repeater {
                     model: 16
@@ -298,8 +313,9 @@ Item {
         Component {
             id: rainComp
             Item {
+                objectName: "rain"
                 anchors.fill: parent
-                x: ambientLayer.gust * 20
+                transform: Translate { x: ambientLayer.gust * 20 }
                 rotation: ambientLayer.gust * 6
 
                 // Ground mist (pure geometry gradient, zero shader overhead)
@@ -371,8 +387,9 @@ Item {
         Component {
             id: firefliesComp
             Item {
+                objectName: "fireflies"
                 anchors.fill: parent
-                x: ambientLayer.gust * 15
+                transform: Translate { x: ambientLayer.gust * 15 }
 
                 Repeater {
                     model: 14
@@ -470,6 +487,7 @@ Item {
         Component {
             id: blobsComp
             Item {
+                objectName: "blobs"
                 anchors.fill: parent
 
                 Item {
@@ -483,6 +501,7 @@ Item {
 
                     // Blob 1: Album color orb
                     Rectangle {
+                        objectName: "albumOrb"
                         width: Math.max(180, parent.width * 0.45)
                         height: width
                         radius: width / 2
@@ -577,6 +596,7 @@ Item {
         Component {
             id: stardustComp
             Item {
+                objectName: "stardust"
                 anchors.fill: parent
 
                 Repeater {
@@ -829,11 +849,16 @@ Item {
         trackIdentity = state.track
         animateLayout = state.sequential && !trackChanged && opts.motion > 0
         transitionDuration = state.sequential ? state.duration : Math.min(180, opts.duration)
-        if (ambientLayer && state.index !== ambientLayer.lastIndex) {
-            ambientLayer.lastIndex = state.index
+        if (trackChanged || state.index !== ambientLayer.lastIndex
+                || state.playing !== ambientLayer.wasPlaying) {
+            ambientLayer.updateTempo()
             if (state.playing) {
                 ambientLayer.onLyricTrigger()
+            } else {
+                ambientLayer.resetReaction()
             }
+            ambientLayer.lastIndex = state.index
+            ambientLayer.wasPlaying = state.playing
         }
         if (trackChanged) {
             for (let b of blocks) b.destroy()
