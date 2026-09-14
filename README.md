@@ -24,7 +24,8 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 - Small overlay position adjustments are accepted without snapping back to the previous position
 - Compact Card and Floating overlays can sit partially beyond the left or right screen edge while keeping a 40px recovery area visible
 - System tray controls for show, hide, settings, and exit
-- System tray playback mode switch between `Non-API` and `API`
+- System tray presentation switch between `Classic` and `Cinematic`, plus Windows startup controls
+- Five-tab embedded Settings with `Non-API` / `Spotify API` playback selection
 - In-app settings for display presets, artwork, Spotify credentials, lyric offset, alignment, font, and colors
 - Windows local playback mode by default on startup, without Spotify Developer credentials
 - Auto-created `.env` file on first launch
@@ -84,6 +85,62 @@ python src\main.py
 |-- requirements.txt
 `-- README.md
 ```
+
+## Cinematic Lyrics
+
+Cinematic Lyrics is an optional Qt Quick presentation designed for filming your
+monitor with a phone. It follows the same Spotify playback and synced lyrics as
+the classic overlay. Previous, active, and upcoming lyric blocks move together;
+long lines wrap at word boundaries within a configurable maximum width.
+
+### Open and customize
+
+1. Run `python src\main.py` and play a song in Spotify.
+2. Right-click the Lyricfy tray icon and select **Presentation → Cinematic**, or press
+   **Shift+M** while the classic overlay has focus.
+3. Hover over the Cinematic window and click **Style**, or press **Shift+S**.
+4. Adjust font, size, bold, alignment, individual lyric colors, context opacity,
+   maximum text width, padding, spacing, glow, transition duration, and motion.
+5. Select a transparent, solid, gradient, or album-colored background. Background
+   motion, vignette, title/artist, and album cover can be customized independently.
+6. Changes preview immediately. **Save** persists them; **Cancel** restores the
+   saved style. Album-colored backgrounds fetch artwork even if the cover is hidden.
+
+The initial Cinematic style is a transparent, always-on-top overlay with warm
+white lyrics. Drag its background to move it; drag the bottom-right grip to resize.
+**F11** or a double-click toggles fullscreen; **Esc** leaves fullscreen.
+**Shift+H** centers the window on its current monitor. **Shift+F** hides it to the
+tray. **Classic** or **Shift+M** returns to the classic overlay. Shortcuts act on
+the focused window. Tray **Show Overlay**, **Hide Overlay**, and **Snap Home**
+follow the selected presentation (**Reset Position** replaces Snap Home in the tray).
+**Settings…** opens the shared settings panel; Cinematic **Style** opens its Cinematic tab.
+
+Each wrapped lyric remains one timestamped block. Context fades away if the window
+is too short; exceptionally tall active lyrics become scrollable rather than
+being truncated or automatically shrunk. Pause holds the active block; seeking
+resets the visual position. Repeated text at different timestamps still transitions.
+Rendering uses Qt Quick animation timing, independently of Spotify polling; actual
+frame rate depends on the GPU, display, and effects selected.
+
+Settings are stored in `.env` as `CINEMATIC_ENABLED` and the JSON-valued
+`CINEMATIC_OPTIONS`. The in-app style panel handles validation and serialization.
+
+### Offline preview
+
+Try the visual style without Spotify or changing saved preferences:
+
+```powershell
+python src\main.py --cinematic-demo
+```
+
+The preview cycles sample Indonesian lines, including long and repeated lyrics.
+Use `--demo-seconds 10` to exit automatically, including with a packaged executable:
+
+```powershell
+Lyricfy.exe --cinematic-demo --demo-seconds 10
+```
+
+`build.bat` includes the QML scene and Qt Quick runtime in the Windows executable.
 
 ## Spotify API Mode Setup
 
@@ -220,38 +277,38 @@ If Spotify login was already cached before these read-only scopes were added, de
 
 ## Settings Panel
 
-The built-in settings panel supports:
+Settings stays inside the existing overlay and provides five scrollable tabs:
 
-- Display presets: `Card Default`, `Floating Minimal`, and `Floating Context`
-- Detailed display controls for card/floating style, single/current-next lyrics, and track information visibility
+| Tab | Controls |
+| --- | --- |
+| General | Windows startup and initial visibility, Settings/Hide buttons, hover controls, shortcut guide, version |
+| Playback | Non-API / Spotify API, Client ID, masked Client Secret with Show/Hide, redirect URI, connection status, reconnect, polling interval |
+| Appearance | Classic / Cinematic presentation, Classic presets and layout, typography, color pickers, artwork, spacing and corner radius |
+| Cinematic | Typography, lyric colors, context opacity, layout, background, motion/glow, ambient effects and track details |
+| Lyrics | Offset, LRCLIB lookup, automatic `.lrc` cache and clear downloaded lyrics |
 
-- Automatically hides Spotify API credential fields while `Non-API` mode is active
-- Spotify Client ID
-- Spotify Client Secret
-- Redirect URI
-- Lyric Offset (ms)
-- Text Alignment
-- Display Preset
-- Display Style
-- Lyric Lines
-- Track Information
-- Track Info Gap (`0` to `24` px, default `4` px)
-- Lyric Font
-- Font Size
-- Overlay Color
-- Text Color
-- Lyric Color
-- Lyric Glow Color
-- Optional album cover in Card and Floating modes
-- Floating cover visibility (`Always Visible` or `On Hover`)
-- Overlay corner radius (`0` to `40` px)
-- Auto-save fetched LRCLIB lyrics as local `.lrc` cache
-- Shortcut guide
-- Reset Default
-- Clear downloaded lyric cache
-- Close Settings
+The expanded panel targets **860 × 720 logical pixels**, clamped to the current
+monitor's available work area with a 32px size allowance. This also accommodates
+portrait displays and Windows scaling. Tabs scroll internally; the footer remains
+visible. API selection and lyric font size do not enlarge Settings. Closing it
+restores the compact overlay position and selected presentation.
 
-Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl+R` to reconnect with the latest credentials.
+The settings tabs inherit Classic's background color, transparency, text colors,
+and corner radius. The live lyric header remains above the tabs while playback
+continues. Opening and closing Settings expands/collapses the existing card with
+a 220ms eased animation. Classic lyric changes use a shared upward block transition:
+the next lyric moves into the active slot while the outgoing lyric fades upward.
+Transitions last up to 360ms, shortened for closely timed lyrics; seeking and
+track changes reset directly to the correct line.
+
+- **Apply** validates, writes `.env`, and applies changes while keeping Settings open.
+- **Save** applies changes and closes Settings.
+- **Cancel**, **Close**, and **Shift+S** discard edits since the last Apply/Save and restore previews.
+- Playback source, credentials, or polling changes reconnect automatically after Apply/Save.
+- **Reload Playback** / **Ctrl+R** reconnects the applied configuration; apply pending edits first.
+- **Reset this tab to defaults** edits only that tab and requires Apply/Save. Playback reset preserves credentials.
+- Clearing downloaded lyrics is immediate, confirmed separately, and cannot be undone with Cancel.
+- Startup and presentation changes from the tray update the corresponding fields without discarding other pending edits.
 
 ### Display Presets
 
@@ -275,28 +332,30 @@ Use `Save` to write changes to `.env`, then use `Reload Playback` or press `Ctrl
 
 ### Overlay Corner Radius
 
-- `Overlay Corner Radius` controls the rounded corners of the Card background, Settings background, and subtle Floating hover background.
+- `Overlay Corner Radius` controls the rounded corners of the Card background, expanded Settings, and subtle Floating hover background.
 - The supported range is `0` to `40` pixels. `0` produces square corners and the default remains `30` pixels.
 - Album artwork keeps its own fixed 8px corner radius.
 
-`Floating Cover` and `Overlay Corner Radius` are grouped under the left-side `Overlay` section so the Settings columns remain balanced.
+`Floating Cover` and `Overlay Corner Radius` are under **Appearance → Artwork & layout**.
 
 `PLAYBACK_SOURCE` supports:
 
 - `windows` for local Windows media session playback detection
 - `spotify_api` to force the previous Spotify Web API flow
 
-You can also change the mode from the tray menu:
+The compact tray menu contains:
 
 - `Show Overlay`
 - `Hide Overlay`
-- `Open Settings`
-- `Snap Home` -> return the overlay to top-center on its current monitor
-- `Mode` -> `Non-API` or `API`
-- `Overlay Controls` -> show or hide the overlay controls and enable `Card Controls on Hover`
+- `Reset Position` -> return the overlay to top-center on its current monitor
+- `Presentation` -> `Classic` or `Cinematic`
 - `Startup` -> enable Windows auto start and choose whether Lyricfy opens visible or starts hidden in the tray
-- `Display Preset` -> `Card Default`, `Floating Minimal`, or `Floating Context`
-- `Lyricfy v1.4.2`
+- `Settings…`
+- `Lyricfy v<version>` (informational)
+- `Exit Lyricfy`
+
+Select **Settings → Playback** to switch Non-API / API. Display presets and
+overlay controls are in Settings; the version is under General → About.
 
 Recommended value:
 

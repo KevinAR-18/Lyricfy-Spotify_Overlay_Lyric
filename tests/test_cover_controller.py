@@ -2,6 +2,7 @@ from lyric_overlay.app_controller import AppController
 from lyric_overlay.config import default_config
 from lyric_overlay.lyrics import LyricsRepository
 from lyric_overlay.models import TrackInfo
+from PySide6.QtCore import QObject
 
 
 class OverlayStub:
@@ -18,6 +19,7 @@ def _track(track_id="track"):
 
 def _controller():
     controller = AppController.__new__(AppController)
+    QObject.__init__(controller)
     controller.config = default_config()
     controller.overlay = OverlayStub()
     controller.snapshot = type("Snapshot", (), {"track": _track()})()

@@ -8,70 +8,31 @@ from PySide6.QtCore import QTimer, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QAction, QActionGroup, QIcon
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lyric_overlay.app_controller import AppController
+from lyric_overlay import __version__
+from lyric_overlay.config import (
+    AppConfig, ICON_FILE, SPOTIFY_API_PLAYBACK_SOURCE, ensure_directories,
+    ensure_env_file, load_config, save_config,
+)
+from lyric_overlay.lyrics import LyricsRepository
+from lyric_overlay.overlay import OverlayWindow, create_application
+from lyric_overlay.spotify_client import PlaybackClient, create_playback_client
 
 APP_NAME = "Lyricfy"
 START_HIDDEN_ARG = "--start-hidden"
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from lyric_overlay import __version__
-    from lyric_overlay.app_controller import AppController
-    from lyric_overlay.config import (
-        CARD_DEFAULT_PRESET,
-        CUSTOM_DISPLAY_PRESET,
-        DISPLAY_PRESETS,
-        FLOATING_CONTEXT_PRESET,
-        FLOATING_MINIMAL_PRESET,
-        AppConfig,
-        ICON_FILE,
-        SPOTIFY_API_PLAYBACK_SOURCE,
-        WINDOWS_PLAYBACK_SOURCE,
-        ensure_directories,
-        ensure_env_file,
-        load_config,
-        save_config,
-        display_preset_for,
-        display_preset_values,
-    )
-    from lyric_overlay.lyrics import LyricsRepository
-    from lyric_overlay.overlay import OverlayWindow, create_application
-    from lyric_overlay.spotify_client import PlaybackClient, create_playback_client
-else:
-    from . import __version__
-    from .app_controller import AppController
-    from .config import (
-        CARD_DEFAULT_PRESET,
-        CUSTOM_DISPLAY_PRESET,
-        DISPLAY_PRESETS,
-        FLOATING_CONTEXT_PRESET,
-        FLOATING_MINIMAL_PRESET,
-        AppConfig,
-        ICON_FILE,
-        SPOTIFY_API_PLAYBACK_SOURCE,
-        WINDOWS_PLAYBACK_SOURCE,
-        ensure_directories,
-        ensure_env_file,
-        load_config,
-        save_config,
-        display_preset_for,
-        display_preset_values,
-    )
-    from .lyrics import LyricsRepository
-    from .overlay import OverlayWindow, create_application
-    from .spotify_client import PlaybackClient, create_playback_client
-
 
 def build_playback_client(config: AppConfig) -> tuple[PlaybackClient | None, str | None]:
     try:
-        return (
-            create_playback_client(
-                playback_source=config.playback_source,
-                client_id=config.spotify_client_id,
-                client_secret=config.spotify_client_secret,
-                redirect_uri=config.spotify_redirect_uri,
-            ),
-            None,
-        )
+        return create_playback_client(
+            playback_source=config.playback_source,
+            client_id=config.spotify_client_id,
+            client_secret=config.spotify_client_secret,
+            redirect_uri=config.spotify_redirect_uri,
+        ), None
     except (RuntimeError, ValueError) as exc:
         return None, str(exc)
 
@@ -85,14 +46,8 @@ def qt_message_handler(mode, context, message) -> None:
 
 def playback_startup_lines(playback_source: str, error_message: str | None = None) -> tuple[str, str]:
     if playback_source == SPOTIFY_API_PLAYBACK_SOURCE:
-        return (
-            "Open Settings and fill Spotify API credentials",
-            error_message or "Then press Ctrl+R to retry",
-        )
-    return (
-        "Open Spotify desktop and start playback",
-        error_message or "Then press Ctrl+R to retry",
-    )
+        return "Open Settings and fill Spotify API credentials", error_message or "Then press Ctrl+R to retry"
+    return "Open Spotify desktop and start playback", error_message or "Then press Ctrl+R to retry"
 
 
 def set_windows_autostart(enabled: bool, start_hidden: bool) -> None:
@@ -100,17 +55,13 @@ def set_windows_autostart(enabled: bool, start_hidden: bool) -> None:
         import winreg
     except ImportError:
         return
-
-    if getattr(sys, "frozen", False):
-        command = f'"{sys.executable}"'
-    else:
-        command = f'"{sys.executable}" "{Path(sys.argv[0]).resolve()}"'
+    command = f'"{sys.executable}"'
+    if not getattr(sys, "frozen", False):
+        command += f' "{Path(sys.argv[0]).resolve()}"'
     if start_hidden:
-        command = f"{command} {START_HIDDEN_ARG}"
-
-    run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        command += f" {START_HIDDEN_ARG}"
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_SET_VALUE) as key:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE) as key:
             if enabled:
                 winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, command)
             else:
@@ -122,413 +73,185 @@ def set_windows_autostart(enabled: bool, start_hidden: bool) -> None:
         pass
 
 
+class SettingsCoordinator:
+    """One persistence/reconnection path shared by all settings tabs."""
+
+    def __init__(self, overlay, controller, cinematic):
+        self.overlay = overlay
+        self.controller = controller
+        self.cinematic = cinematic
+        overlay.save_requested.connect(self.save)
+        overlay.reconnect_requested.connect(self.reconnect)
+        controller.playback_error.connect(overlay.playback_status.setText)
+
+    def save(self, config):
+        old = self.controller.config
+        playback_fields = ("playback_source", "spotify_client_id", "spotify_client_secret", "spotify_redirect_uri", "poll_interval_ms")
+        reconnect = any(getattr(old, name) != getattr(config, name) for name in playback_fields)
+        try:
+            if config.cinematic_enabled:
+                self.cinematic.ensure_window()
+            save_config(config)
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.overlay.settings_feedback.setText(f"Could not save settings: {exc}")
+            return
+        set_windows_autostart(config.autostart_enabled, config.autostart_start_hidden)
+        self.controller.config = config
+        self.overlay.load_config_values(config)
+        self.cinematic.sync_config(config)
+        self.controller.lyrics_repository.set_lrclib_enabled(config.lrclib_enabled)
+        self.controller.lyrics_repository.set_auto_save_fetched_lrc(config.auto_save_fetched_lrc)
+        self.controller.refresh_album_cover()
+        self.overlay.settings_feedback.setText("Settings saved")
+        if reconnect:
+            self.reconnect()
+        if self.overlay._expanded:
+            if config.cinematic_enabled:
+                self.cinematic.ensure_window().show_from_tray()
+            elif self.cinematic.window:
+                self.cinematic.window.hide()
+            self.overlay.raise_()
+
+    def reconnect(self):
+        config = self.controller.config
+        self.overlay.playback_status.setText("Connecting to playback…")
+        client, error = build_playback_client(config)
+        self.controller.reconnect(client, config, unavailable_message=error)
+        self.overlay.playback_status.setText(error or "Playback client ready — waiting for Spotify playback")
+
+
+def create_tray_menu(overlay, controller, cinematic, quit_callback):
+    menu = QMenu()
+    menu.addAction("Show Overlay", cinematic.show)
+    menu.addAction("Hide Overlay", cinematic.hide)
+    menu.addAction("Reset Position", cinematic.snap_home)
+    menu.addSeparator()
+    presentation = QMenu("Presentation", menu)
+    menu.addMenu(presentation)
+    presentation_group = QActionGroup(presentation)
+    presentation_group.setExclusive(True)
+    presentation_actions = {}
+    for enabled, label in ((False, "Classic"), (True, "Cinematic")):
+        action = QAction(label, presentation_group)
+        action.setCheckable(True)
+        action.triggered.connect(lambda checked, value=enabled: cinematic.set_enabled(value) if checked else None)
+        presentation.addAction(action)
+        presentation_actions[enabled] = action
+    startup = QMenu("Startup", menu)
+    menu.addMenu(startup)
+    auto = startup.addAction("Auto Start with Windows")
+    auto.setCheckable(True)
+    startup.addSeparator()
+    startup_group = QActionGroup(startup)
+    startup_group.setExclusive(True)
+    startup_actions = {}
+
+    def startup_changed(**updates):
+        config = replace(controller.config, **updates)
+        try:
+            save_config(config)
+        except OSError as exc:
+            overlay.show_status(f"Could not save startup preferences: {exc}")
+            sync()
+            return
+        set_windows_autostart(config.autostart_enabled, config.autostart_start_hidden)
+        controller.config = config
+        overlay.sync_external_preferences(**updates)
+        sync()
+
+    auto.triggered.connect(lambda checked: startup_changed(autostart_enabled=checked))
+    for hidden, label in ((False, "Show Overlay"), (True, "Start Hidden")):
+        action = QAction(label, startup_group)
+        action.setCheckable(True)
+        action.triggered.connect(lambda checked, value=hidden: startup_changed(autostart_start_hidden=value) if checked else None)
+        startup.addAction(action)
+        startup_actions[hidden] = action
+    menu.addAction("Settings…", overlay.open_settings_from_tray)
+    menu.addSeparator()
+    version = menu.addAction(f"Lyricfy v{__version__}")
+    version.setEnabled(False)
+    menu.addSeparator()
+    menu.addAction("Exit Lyricfy", quit_callback)
+
+    def sync(*args):
+        config = controller.config
+        presentation_actions[config.cinematic_enabled].setChecked(True)
+        auto.setChecked(config.autostart_enabled)
+        startup_actions[config.autostart_start_hidden].setChecked(True)
+        for action in startup_actions.values():
+            action.setEnabled(config.autostart_enabled)
+
+    menu.aboutToShow.connect(sync)
+    cinematic.modeChanged.connect(sync)
+    sync()
+    return menu
+
+
 def main() -> int:
+    if "--cinematic-demo" in sys.argv:
+        from lyric_overlay.cinematic.demo import run_demo
+        return run_demo()
     qInstallMessageHandler(qt_message_handler)
     ensure_directories()
     ensure_env_file()
     config = load_config()
     set_windows_autostart(config.autostart_enabled, config.autostart_start_hidden)
-
     app = create_application()
     app.setApplicationName(APP_NAME)
-    icon_path = ICON_FILE
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
+    if ICON_FILE.exists():
+        app.setWindowIcon(QIcon(str(ICON_FILE)))
     overlay = OverlayWindow()
-    if icon_path.exists():
-        overlay.setWindowIcon(QIcon(str(icon_path)))
     overlay.load_config_values(config)
+    controller = AppController(None, LyricsRepository(
+        lrclib_enabled=config.lrclib_enabled,
+        auto_save_fetched_lrc=config.auto_save_fetched_lrc,
+    ), overlay, config)
+    from lyric_overlay.cinematic.manager import CinematicManager
+    cinematic = CinematicManager(overlay, controller, app)
+    coordinator = SettingsCoordinator(overlay, controller, cinematic)
 
-    def merge_config(base_config: AppConfig, updates: AppConfig) -> AppConfig:
-        return replace(
-            base_config,
-            playback_source=updates.playback_source,
-            spotify_client_id=updates.spotify_client_id,
-            spotify_client_secret=updates.spotify_client_secret,
-            spotify_redirect_uri=updates.spotify_redirect_uri or "http://127.0.0.1:8888/callback",
-            auto_save_fetched_lrc=updates.auto_save_fetched_lrc,
-            lyric_offset_ms=updates.lyric_offset_ms,
-            overlay_bg_color=updates.overlay_bg_color or base_config.overlay_bg_color,
-            overlay_text_color=updates.overlay_text_color or base_config.overlay_text_color,
-            lyric_text_color=updates.lyric_text_color or base_config.lyric_text_color,
-            lyric_glow_color=updates.lyric_glow_color or base_config.lyric_glow_color,
-            lyric_toggle_color=updates.lyric_toggle_color or base_config.lyric_toggle_color,
-            lyric_font_family=updates.lyric_font_family or base_config.lyric_font_family,
-            lyric_font_size=updates.lyric_font_size or base_config.lyric_font_size,
-            text_alignment=updates.text_alignment or base_config.text_alignment,
-            display_style=updates.display_style,
-            lyric_lines=updates.lyric_lines,
-            track_info_mode=updates.track_info_mode,
-            show_album_cover=updates.show_album_cover,
-            floating_cover_mode=updates.floating_cover_mode,
-            track_info_gap_px=updates.track_info_gap_px,
-            overlay_corner_radius=updates.overlay_corner_radius,
-            show_settings_button=updates.show_settings_button,
-            show_hide_button=updates.show_hide_button,
-            hover_buttons_enabled=updates.hover_buttons_enabled,
-            autostart_enabled=updates.autostart_enabled,
-            autostart_start_hidden=updates.autostart_start_hidden,
-        )
+    tray = None
 
-    mode_windows_action = None
-    mode_api_action = None
-    show_settings_button_action = None
-    show_hide_button_action = None
-    hover_buttons_action = None
-    autostart_action = None
-    autostart_show_action = None
-    autostart_hidden_action = None
-    display_preset_actions: dict[str, QAction] = {}
+    def quit_app():
+        overlay.allow_exit()
+        overlay.close()
+        if tray:
+            tray.hide()
+        app.quit()
 
-    def sync_mode_actions(playback_source: str) -> None:
-        normalized = playback_source or WINDOWS_PLAYBACK_SOURCE
-        if mode_windows_action is not None:
-            mode_windows_action.setChecked(normalized == WINDOWS_PLAYBACK_SOURCE)
-        if mode_api_action is not None:
-            mode_api_action.setChecked(normalized == SPOTIFY_API_PLAYBACK_SOURCE)
-
-    def sync_overlay_button_actions(config: AppConfig) -> None:
-        if show_settings_button_action is not None:
-            show_settings_button_action.setChecked(config.show_settings_button)
-        if show_hide_button_action is not None:
-            show_hide_button_action.setChecked(config.show_hide_button)
-        if hover_buttons_action is not None:
-            hover_buttons_action.setChecked(config.hover_buttons_enabled)
-
-    def sync_startup_actions(config: AppConfig) -> None:
-        if autostart_action is not None:
-            autostart_action.setChecked(config.autostart_enabled)
-        if autostart_show_action is not None:
-            autostart_show_action.setChecked(not config.autostart_start_hidden)
-        if autostart_hidden_action is not None:
-            autostart_hidden_action.setChecked(config.autostart_start_hidden)
-
-    def sync_display_preset_actions(config: AppConfig) -> None:
-        preset = display_preset_for(config)
-        for name, action in display_preset_actions.items():
-            action.setChecked(name == preset)
-
-    tray_icon = None
     if QSystemTrayIcon.isSystemTrayAvailable():
-        tray_icon = QSystemTrayIcon(app)
-        if icon_path.exists():
-            tray_icon.setIcon(QIcon(str(icon_path)))
-        tray_icon.setToolTip("Lyricfy")
+        tray = QSystemTrayIcon(app)
+        if ICON_FILE.exists():
+            tray.setIcon(QIcon(str(ICON_FILE)))
+        tray.setToolTip(APP_NAME)
+        tray_menu = create_tray_menu(overlay, controller, cinematic, quit_app)
+        tray.setContextMenu(tray_menu)
+        tray.activated.connect(lambda reason: cinematic.show() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
+        tray.show()
 
-        tray_menu = QMenu()
-        show_action = QAction("Show Overlay", tray_menu)
-        hide_action = QAction("Hide Overlay", tray_menu)
-        settings_action = QAction("Open Settings", tray_menu)
-        snap_home_action = QAction("Snap Home", tray_menu)
-        mode_menu = QMenu("Mode", tray_menu)
-        overlay_buttons_menu = QMenu("Overlay Controls", tray_menu)
-        startup_menu = QMenu("Startup", tray_menu)
-        display_preset_menu = QMenu("Display Preset", tray_menu)
-        mode_group = QActionGroup(mode_menu)
-        mode_group.setExclusive(True)
-        startup_group = QActionGroup(startup_menu)
-        startup_group.setExclusive(True)
-        display_preset_group = QActionGroup(display_preset_menu)
-        display_preset_group.setExclusive(True)
-        for preset, label in (
-            (CARD_DEFAULT_PRESET, "Card Default"),
-            (FLOATING_MINIMAL_PRESET, "Floating Minimal"),
-            (FLOATING_CONTEXT_PRESET, "Floating Context"),
-            (CUSTOM_DISPLAY_PRESET, "Custom"),
-        ):
-            action = QAction(label, display_preset_group)
-            action.setCheckable(True)
-            if preset == CUSTOM_DISPLAY_PRESET:
-                action.setEnabled(False)
-            display_preset_actions[preset] = action
-            display_preset_menu.addAction(action)
-        mode_windows_action = QAction("Non-API", mode_group)
-        mode_windows_action.setCheckable(True)
-        mode_api_action = QAction("API", mode_group)
-        mode_api_action.setCheckable(True)
-        mode_menu.addAction(mode_windows_action)
-        mode_menu.addAction(mode_api_action)
-        show_settings_button_action = QAction("Show Settings Button", overlay_buttons_menu)
-        show_settings_button_action.setCheckable(True)
-        show_hide_button_action = QAction("Show Hide Button", overlay_buttons_menu)
-        show_hide_button_action.setCheckable(True)
-        hover_buttons_action = QAction("Card Controls on Hover", overlay_buttons_menu)
-        hover_buttons_action.setCheckable(True)
-        overlay_buttons_menu.addAction(show_settings_button_action)
-        overlay_buttons_menu.addAction(show_hide_button_action)
-        overlay_buttons_menu.addSeparator()
-        overlay_buttons_menu.addAction(hover_buttons_action)
-        autostart_action = QAction("Auto Start", startup_menu)
-        autostart_action.setCheckable(True)
-        autostart_show_action = QAction("Show Overlay", startup_group)
-        autostart_show_action.setCheckable(True)
-        autostart_hidden_action = QAction("Start Hidden", startup_group)
-        autostart_hidden_action.setCheckable(True)
-        startup_menu.addAction(autostart_action)
-        startup_menu.addSeparator()
-        startup_menu.addAction(autostart_show_action)
-        startup_menu.addAction(autostart_hidden_action)
-        signature_action = QAction(f"Lyricfy v{__version__}", tray_menu)
-        signature_action.setEnabled(False)
-        exit_action = QAction("Exit", tray_menu)
-        tray_menu.addAction(show_action)
-        tray_menu.addAction(hide_action)
-        tray_menu.addAction(settings_action)
-        tray_menu.addAction(snap_home_action)
-        tray_menu.addMenu(mode_menu)
-        tray_menu.addMenu(display_preset_menu)
-        tray_menu.addMenu(overlay_buttons_menu)
-        tray_menu.addMenu(startup_menu)
-        tray_menu.addSeparator()
-        tray_menu.addAction(signature_action)
-        tray_menu.addSeparator()
-        tray_menu.addAction(exit_action)
-        tray_icon.setContextMenu(tray_menu)
+    def toggle_color(updated):
+        config = replace(controller.config, lyric_text_color=updated.lyric_text_color)
+        save_config(config)
+        controller.config = config
+        overlay.sync_external_preferences(lyric_text_color=config.lyric_text_color)
 
-        def show_overlay() -> None:
-            overlay.show_from_tray()
+    def clear_cache():
+        count = controller.lyrics_repository.clear_downloaded_cache()
+        overlay.settings_feedback.setText(f"Cleared {count} downloaded lyric files" if count else "No downloaded lyric cache to clear")
 
-        def hide_overlay() -> None:
-            overlay.hide_to_tray()
-
-        def open_settings() -> None:
-            overlay.open_settings_from_tray()
-
-        def apply_playback_source(playback_source: str) -> None:
-            base_config = load_config()
-            updated_config = replace(base_config, playback_source=playback_source)
-            save_config(updated_config)
-            overlay.load_config_values(updated_config)
-            controller.config = updated_config
-            sync_mode_actions(updated_config.playback_source)
-            sync_overlay_button_actions(updated_config)
-            overlay.show_status(
-                "Mode changed to API playback"
-                if playback_source == SPOTIFY_API_PLAYBACK_SOURCE
-                else "Mode changed to non-API playback"
-            )
-            reconnect_spotify()
-
-        def apply_display_preset(preset: str) -> None:
-            values = display_preset_values(preset)
-            if values is None:
-                return
-            base_config = load_config()
-            display_style, lyric_lines, track_info_mode = values
-            updated_config = replace(
-                base_config,
-                display_style=display_style,
-                lyric_lines=lyric_lines,
-                track_info_mode=track_info_mode,
-            )
-            save_config(updated_config)
-            controller.config = updated_config
-            overlay.load_config_values(updated_config)
-            overlay.apply_display_preset(preset)
-            sync_display_preset_actions(updated_config)
-
-        def apply_overlay_button_visibility(
-            *,
-            show_settings_button: bool | None = None,
-            show_hide_button: bool | None = None,
-            hover_buttons_enabled: bool | None = None,
-        ) -> None:
-            base_config = load_config()
-            updated_config = replace(
-                base_config,
-                show_settings_button=(
-                    base_config.show_settings_button
-                    if show_settings_button is None
-                    else show_settings_button
-                ),
-                show_hide_button=(
-                    base_config.show_hide_button
-                    if show_hide_button is None
-                    else show_hide_button
-                ),
-                hover_buttons_enabled=(
-                    base_config.hover_buttons_enabled
-                    if hover_buttons_enabled is None
-                    else hover_buttons_enabled
-                ),
-            )
-            save_config(updated_config)
-            overlay.load_config_values(updated_config)
-            controller.config = updated_config
-            sync_overlay_button_actions(updated_config)
-
-        def apply_startup_settings(
-            *,
-            autostart_enabled: bool | None = None,
-            autostart_start_hidden: bool | None = None,
-        ) -> None:
-            base_config = load_config()
-            updated_config = replace(
-                base_config,
-                autostart_enabled=(
-                    base_config.autostart_enabled
-                    if autostart_enabled is None
-                    else autostart_enabled
-                ),
-                autostart_start_hidden=(
-                    base_config.autostart_start_hidden
-                    if autostart_start_hidden is None
-                    else autostart_start_hidden
-                ),
-            )
-            save_config(updated_config)
-            set_windows_autostart(
-                updated_config.autostart_enabled,
-                updated_config.autostart_start_hidden,
-            )
-            overlay.load_config_values(updated_config)
-            controller.config = updated_config
-            sync_startup_actions(updated_config)
-
-        def exit_app() -> None:
-            overlay.allow_exit()
-            overlay.close()
-            if tray_icon is not None:
-                tray_icon.hide()
-            app.quit()
-
-        show_action.triggered.connect(show_overlay)
-        hide_action.triggered.connect(hide_overlay)
-        settings_action.triggered.connect(open_settings)
-        snap_home_action.triggered.connect(overlay.snap_to_home)
-        mode_windows_action.triggered.connect(
-            lambda checked: apply_playback_source(WINDOWS_PLAYBACK_SOURCE) if checked else None
-        )
-        mode_api_action.triggered.connect(
-            lambda checked: apply_playback_source(SPOTIFY_API_PLAYBACK_SOURCE) if checked else None
-        )
-        for preset, action in display_preset_actions.items():
-            if preset == CUSTOM_DISPLAY_PRESET:
-                continue
-            action.triggered.connect(
-                lambda checked, selected=preset: apply_display_preset(selected) if checked else None
-            )
-        show_settings_button_action.triggered.connect(
-            lambda checked: apply_overlay_button_visibility(show_settings_button=checked)
-        )
-        show_hide_button_action.triggered.connect(
-            lambda checked: apply_overlay_button_visibility(show_hide_button=checked)
-        )
-        hover_buttons_action.triggered.connect(
-            lambda checked: apply_overlay_button_visibility(hover_buttons_enabled=checked)
-        )
-        autostart_action.triggered.connect(
-            lambda checked: apply_startup_settings(autostart_enabled=checked)
-        )
-        autostart_show_action.triggered.connect(
-            lambda checked: apply_startup_settings(autostart_start_hidden=False) if checked else None
-        )
-        autostart_hidden_action.triggered.connect(
-            lambda checked: apply_startup_settings(autostart_start_hidden=True) if checked else None
-        )
-        exit_action.triggered.connect(exit_app)
-        tray_icon.activated.connect(
-            lambda reason: show_overlay()
-            if reason == QSystemTrayIcon.ActivationReason.Trigger
-            else None
-        )
-        sync_mode_actions(config.playback_source)
-        sync_overlay_button_actions(config)
-        sync_startup_actions(config)
-        sync_display_preset_actions(config)
-        tray_icon.show()
-
-    controller = AppController(
-        playback_client=None,
-        lyrics_repository=LyricsRepository(
-            lrclib_enabled=config.lrclib_enabled,
-            auto_save_fetched_lrc=config.auto_save_fetched_lrc,
-        ),
-        overlay=overlay,
-        config=config,
-    )
-
-    def save_settings(new_config: AppConfig) -> None:
-        current_config = controller.config
-        saved_config = merge_config(current_config, new_config)
-        save_config(saved_config)
-        set_windows_autostart(saved_config.autostart_enabled, saved_config.autostart_start_hidden)
-        overlay.load_config_values(saved_config)
-        overlay.apply_config_theme(saved_config)
-        overlay.show_status("Settings saved to .env")
-        controller.config = saved_config
-        controller.lyrics_repository.set_auto_save_fetched_lrc(saved_config.auto_save_fetched_lrc)
-        controller.refresh_album_cover()
-        sync_mode_actions(saved_config.playback_source)
-        sync_overlay_button_actions(saved_config)
-        sync_startup_actions(saved_config)
-        sync_display_preset_actions(saved_config)
-
-    def toggle_lyric_color(updated_config: AppConfig) -> None:
-        saved_config = replace(
-            updated_config,
-            playback_source=controller.config.playback_source,
-            spotify_client_id=controller.config.spotify_client_id,
-            spotify_client_secret=controller.config.spotify_client_secret,
-            spotify_redirect_uri=controller.config.spotify_redirect_uri,
-            poll_interval_ms=controller.config.poll_interval_ms,
-            lrclib_enabled=controller.config.lrclib_enabled,
-            lyric_text_color=updated_config.lyric_text_color or controller.config.lyric_text_color,
-        )
-        save_config(saved_config)
-        controller.config = saved_config
-
-    def clear_downloaded_lyrics() -> None:
-        removed = controller.lyrics_repository.clear_downloaded_cache()
-        if removed == 0:
-            overlay.show_status("No downloaded lyric cache to clear")
-            return
-        suffix = "file" if removed == 1 else "files"
-        overlay.show_status(f"Cleared {removed} downloaded lyric {suffix}")
-
-    def reconnect_spotify() -> None:
-        latest = load_config()
-        overlay.load_config_values(latest)
-        sync_mode_actions(latest.playback_source)
-        sync_overlay_button_actions(latest)
-        sync_startup_actions(latest)
-        sync_display_preset_actions(latest)
-        controller.lyrics_repository.set_lrclib_enabled(latest.lrclib_enabled)
-        controller.lyrics_repository.set_auto_save_fetched_lrc(latest.auto_save_fetched_lrc)
-        new_client, error_message = build_playback_client(latest)
-        if new_client is None:
-            overlay.show_status(error_message or "Failed to connect to Spotify playback.")
-            controller.reconnect(None, latest, unavailable_message=error_message)
-            return
-        controller.reconnect(new_client, latest)
-
-    overlay.save_requested.connect(save_settings)
-    overlay.reconnect_requested.connect(reconnect_spotify)
-    overlay.lyric_color_toggle_requested.connect(toggle_lyric_color)
-    overlay.clear_lyrics_cache_requested.connect(clear_downloaded_lyrics)
-    overlay.overlay_hidden.connect(controller.pause_polling)
+    overlay.lyric_color_toggle_requested.connect(toggle_color)
+    overlay.clear_lyrics_cache_requested.connect(clear_cache)
+    overlay.overlay_hidden.connect(cinematic.pause_if_hidden)
     overlay.overlay_shown.connect(controller.resume_polling)
     app.aboutToQuit.connect(controller.stop)
-
-    def initialize_spotify() -> None:
-        latest = load_config()
-        playback_client, error_message = build_playback_client(latest)
-        if playback_client is None:
-            controller.reconnect(None, latest, unavailable_message=error_message)
-            overlay.set_track(None)
-            overlay.set_lines(*playback_startup_lines(latest.playback_source, error_message))
-            return
-        controller.reconnect(playback_client, latest)
-
+    app.aboutToQuit.connect(cinematic.shutdown)
     overlay.set_track(None)
-    overlay.set_lines("Starting Lyricfy...", "Connecting to Spotify playback")
-    overlay.show_status("Connecting to Spotify playback...")
-    start_hidden = START_HIDDEN_ARG in sys.argv
-    if start_hidden and tray_icon is not None:
+    overlay.set_lines("Starting Lyricfy…", "Connecting to Spotify playback")
+    if START_HIDDEN_ARG in sys.argv and tray is not None:
         overlay.hide_to_tray()
     else:
-        overlay.show()
-    QTimer.singleShot(0, initialize_spotify)
+        cinematic.show()
+    QTimer.singleShot(0, coordinator.reconnect)
     return app.exec()
 
 

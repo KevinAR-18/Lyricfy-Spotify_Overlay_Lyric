@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set VERSION=v1.4.2
+set VERSION=v1.5.0
 
 echo ========================================
 echo Building Lyricfy %VERSION%....
@@ -28,6 +28,7 @@ echo.
   --windowed ^
   --icon=icon.ico ^
   --add-data "icon.ico;." ^
+  --add-data "src\lyric_overlay\cinematic\Cinematic.qml;lyric_overlay\cinematic" ^
   --hidden-import=PySide6.QtCore ^
   --hidden-import=PySide6.QtGui ^
   --hidden-import=PySide6.QtWidgets ^
@@ -46,8 +47,6 @@ echo.
   --exclude-module=PySide6.QtDesigner ^
   --exclude-module=PySide6.QtHelp ^
   --exclude-module=PySide6.QtTest ^
-  --exclude-module=PySide6.QtQuick ^
-  --exclude-module=PySide6.QtQml ^
   --exclude-module=PySide6.QtWebEngineCore ^
   --exclude-module=PySide6.QtWebEngineQuick ^
   --exclude-module=PySide6.QtWebEngineWidgets ^
