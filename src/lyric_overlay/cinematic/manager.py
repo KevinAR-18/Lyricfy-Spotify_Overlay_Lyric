@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 
 from ..config import save_config
+from .preferences import needs_artwork
 from .settings import CinematicSettings
 from .window import CinematicWindow
 
@@ -111,7 +112,7 @@ class CinematicManager(QObject):
 
     def preview_style(self, options):
         self.window.bridge.set_options(options)
-        needs_cover = options["show_cover"] or options["background"] == "album"
+        needs_cover = needs_artwork(options)
         changed = needs_cover != self.controller.cinematic_cover_preview
         self.controller.cinematic_cover_preview = needs_cover
         if changed and needs_cover and not self._artwork:

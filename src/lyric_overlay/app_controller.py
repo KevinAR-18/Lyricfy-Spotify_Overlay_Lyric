@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from .cinematic.preferences import needs_artwork
 from .config import AppConfig, SPOTIFY_API_PLAYBACK_SOURCE
 from .cover_art import CoverArtRepository
 from .lyrics import LyricsRepository
@@ -254,10 +255,7 @@ class AppController(QObject):
 
     def _needs_cover(self) -> bool:
         return self.config.show_album_cover or getattr(self, "cinematic_cover_preview", False) or (
-            self.config.cinematic_enabled and (
-                self.config.cinematic_options["show_cover"]
-                or self.config.cinematic_options["background"] == "album"
-            )
+            self.config.cinematic_enabled and needs_artwork(self.config.cinematic_options)
         )
 
     def _request_album_cover(self, track: TrackInfo) -> None:

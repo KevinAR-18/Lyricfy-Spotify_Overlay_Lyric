@@ -28,6 +28,11 @@ CHOICES = {
 }
 
 
+def needs_artwork(options: dict) -> bool:
+    return bool(options.get("show_cover") or options.get("background") == "album"
+                or options.get("ambient_effect") in ("leaves", "rain", "fireflies", "blobs", "stardust"))
+
+
 def normalize_options(value: object) -> dict:
     from PySide6.QtGui import QColor
 
