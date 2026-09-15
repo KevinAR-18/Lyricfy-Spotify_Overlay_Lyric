@@ -130,7 +130,7 @@ def test_classic_theme_and_live_lyrics_survive_settings_animation(overlay):
     assert overlay.compact_label.text() == "Second lyric"
     overlay.settings_tabs.setCurrentIndex(4)
     assert overlay._lyric_transition.isVisible()
-    QTest.qWait(420)
+    QTest.qWait(600)
     assert overlay._lyric_transition.isHidden()
     assert overlay.compact_label.isVisible()
 

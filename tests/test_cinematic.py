@@ -219,7 +219,10 @@ def test_mode_switch_style_cancel_and_save_preserve_playback_config(app, monkeyp
 def test_ambient_effects_render_and_react_to_lyrics(app):
     from lyric_overlay.cinematic.settings import CinematicSettings
 
-    effects = ("leaves", "snowfall", "rain", "fireflies", "blobs", "stardust")
+    effects = (
+        "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust",
+        "sakura", "bubbles", "underwater", "shooting_stars", "embers", "light_beams",
+    )
     for effect in effects:
         opts = dict(DEFAULTS, background="transparent", ambient_effect=effect, ambient_intensity=75)
         window = CinematicWindow(opts)
@@ -263,6 +266,8 @@ def _artwork(color):
 @pytest.mark.parametrize("effect, expected", [
     ("none", False), ("snowfall", False), ("leaves", True), ("rain", True),
     ("fireflies", True), ("blobs", True), ("stardust", True),
+    ("sakura", False), ("bubbles", False), ("underwater", False),
+    ("shooting_stars", False), ("embers", False), ("light_beams", True),
 ])
 def test_ambient_artwork_required_without_visible_cover(app, effect, expected):
     config = default_config()
@@ -371,7 +376,10 @@ def test_ambient_tempo_tracks_song_changes_pause_and_resume(app):
         app.processEvents()
 
 
-@pytest.mark.parametrize("effect", ["leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"])
+@pytest.mark.parametrize("effect", [
+    "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust",
+    "sakura", "bubbles", "underwater", "shooting_stars", "embers", "light_beams",
+])
 def test_effect_loader_renders_replaces_and_unloads_effect(app, effect):
     options = dict(DEFAULTS, ambient_effect=effect, show_info=False, show_cover=False,
                    glow_strength=0, ambient_intensity=100)
@@ -386,7 +394,7 @@ def test_effect_loader_renders_replaces_and_unloads_effect(app, effect):
         loader = root.findChild(QObject, "ambientEffectLoader")
         item = loader.property("item")
         assert item.objectName() == effect
-        if effect in ("leaves", "snowfall", "rain", "fireflies"):
+        if effect in ("leaves", "snowfall", "rain", "fireflies", "sakura", "bubbles", "embers"):
             # Map rendered coordinates, including transforms (rather than just reading x).
             assert item.mapToItem(loader, QPointF(0, 0)).x() > 0
             window.resize(620, 460)
