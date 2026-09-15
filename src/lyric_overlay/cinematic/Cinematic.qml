@@ -126,6 +126,12 @@ Item {
                 if (eff === "fireflies") return firefliesComp
                 if (eff === "blobs") return blobsComp
                 if (eff === "stardust") return stardustComp
+                if (eff === "sakura") return sakuraComp
+                if (eff === "bubbles") return bubblesComp
+                if (eff === "underwater") return underwaterComp
+                if (eff === "shooting_stars") return shootingStarsComp
+                if (eff === "embers") return embersComp
+                if (eff === "light_beams") return lightBeamsComp
                 return null
             }
         }
@@ -660,25 +666,114 @@ Item {
                                 duration: starItem.floatDuration * 0.16
                                 easing.type: Easing.OutQuad
                             }
-                            SequentialAnimation {
-                                loops: 2
-                                NumberAnimation {
-                                    to: Math.min(1.0, starItem.baseAlpha * 1.4) * ((opts.ambient_intensity || 50) / 100)
-                                    duration: starItem.swayDuration * 0.5
-                                    easing.type: Easing.InOutSine
+                                SequentialAnimation {
+                                    loops: 2
+                                    NumberAnimation {
+                                        to: Math.min(1.0, starItem.baseAlpha * 1.4) * ((opts.ambient_intensity || 50) / 100)
+                                        duration: starItem.swayDuration * 0.5
+                                        easing.type: Easing.InOutSine
+                                    }
+                                    NumberAnimation {
+                                        to: Math.max(0.15, starItem.baseAlpha * 0.6) * ((opts.ambient_intensity || 50) / 100)
+                                        duration: starItem.swayDuration * 0.5
+                                        easing.type: Easing.InOutSine
+                                    }
+                                }
+                                PauseAnimation {
+                                    duration: Math.max(0, starItem.floatDuration * 0.68 - starItem.swayDuration * 2)
                                 }
                                 NumberAnimation {
-                                    to: Math.max(0.15, starItem.baseAlpha * 0.6) * ((opts.ambient_intensity || 50) / 100)
-                                    duration: starItem.swayDuration * 0.5
-                                    easing.type: Easing.InOutSine
+                                    to: 0
+                                    duration: starItem.floatDuration * 0.16
+                                    easing.type: Easing.InQuad
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. Sakura Effect (Delicate cherry blossom petals drifting and gently fluttering)
+        Component {
+            id: sakuraComp
+            Item {
+                objectName: "sakura"
+                anchors.fill: parent
+                transform: Translate { x: ambientLayer.gust * 30 }
+
+                Repeater {
+                    model: 16
+                    Item {
+                        id: sakuraItem
+                        readonly property real startX: (index * 51) % Math.max(100, ambientLayer.width)
+                        readonly property real fallDuration: Math.max(2200, (4800 + (index * 410) % 2600) / ambientLayer.tempoScale)
+                        readonly property real swayAmp: 25 + (index * 6) % 22
+                        readonly property real swayDuration: Math.max(1100, (2100 + (index * 310) % 1500) / ambientLayer.tempoScale)
+                        readonly property real petalW: 13 + (index % 3) * 3
+                        readonly property real petalH: 9 + (index % 3) * 2
+                        readonly property var petalColors: ["#FFC0CB", "#FFB7C5", "#FFCCD5", "#F8A5C2", "#FFD1DC", opts.glow_color]
+                        readonly property color petalColor: petalColors[index % petalColors.length]
+                        readonly property real baseAlpha: 0.50 + (index % 4) * 0.12
+
+                        width: petalW
+                        height: petalH
+
+                        Rectangle {
+                            anchors.fill: parent
+                            color: sakuraItem.petalColor
+                            topLeftRadius: parent.width * 0.7
+                            topRightRadius: parent.width * 0.2
+                            bottomRightRadius: parent.width * 0.7
+                            bottomLeftRadius: parent.width * 0.2
+                            opacity: 0.95
+                        }
+
+                        NumberAnimation on y {
+                            from: -25
+                            to: ambientLayer.height + 25
+                            duration: sakuraItem.fallDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: sakuraItem.startX + sakuraItem.swayAmp
+                                duration: sakuraItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: sakuraItem.startX - sakuraItem.swayAmp
+                                duration: sakuraItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+
+                        SequentialAnimation on rotation {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation { to: 45; duration: sakuraItem.swayDuration * 1.2; easing.type: Easing.InOutSine }
+                            NumberAnimation { to: -45; duration: sakuraItem.swayDuration * 1.2; easing.type: Easing.InOutSine }
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: sakuraItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: sakuraItem.fallDuration * 0.16
+                                easing.type: Easing.OutQuad
+                            }
                             PauseAnimation {
-                                duration: Math.max(0, starItem.floatDuration * 0.68 - starItem.swayDuration * 2)
+                                duration: sakuraItem.fallDuration * 0.68
                             }
                             NumberAnimation {
                                 to: 0
-                                duration: starItem.floatDuration * 0.16
+                                duration: sakuraItem.fallDuration * 0.16
                                 easing.type: Easing.InQuad
                             }
                         }
@@ -686,7 +781,510 @@ Item {
                 }
             }
         }
-    }
+
+        // 8. Bubbles Effect (Rising transparent bubbles with gentle drift & shine)
+        Component {
+            id: bubblesComp
+            Item {
+                objectName: "bubbles"
+                anchors.fill: parent
+                transform: Translate { x: ambientLayer.gust * 18 }
+
+                Repeater {
+                    model: 15
+                    Item {
+                        id: bubbleItem
+                        readonly property real startX: (index * 47) % Math.max(100, ambientLayer.width)
+                        readonly property real riseDuration: Math.max(2600, (6000 + (index * 460) % 3200) / ambientLayer.tempoScale)
+                        readonly property real wobbleAmp: 12 + (index * 4) % 16
+                        readonly property real wobbleDuration: Math.max(1200, (2200 + (index * 250) % 1300) / ambientLayer.tempoScale)
+                        readonly property real bubbleSize: 10 + (index % 4) * 6
+                        readonly property real baseAlpha: 0.40 + (index % 3) * 0.15
+
+                        width: bubbleSize
+                        height: bubbleSize
+
+                        // Bubble outline & subtle body
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: Qt.alpha(opts.glow_color, 0.08)
+                            border.color: Qt.alpha("#D8F0FF", 0.70)
+                            border.width: 1.2
+                            scale: 1.0 + ambientLayer.pulse * 0.18
+
+                            // Specular shine dot
+                            Rectangle {
+                                width: Math.max(2, parent.width * 0.28)
+                                height: width
+                                radius: width / 2
+                                x: parent.width * 0.22
+                                y: parent.height * 0.22
+                                color: Qt.alpha("#FFFFFF", 0.85)
+                            }
+                        }
+
+                        NumberAnimation on y {
+                            from: ambientLayer.height + 25
+                            to: -25
+                            duration: bubbleItem.riseDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: bubbleItem.startX + bubbleItem.wobbleAmp
+                                duration: bubbleItem.wobbleDuration
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: bubbleItem.startX - bubbleItem.wobbleAmp
+                                duration: bubbleItem.wobbleDuration
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: bubbleItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: bubbleItem.riseDuration * 0.15
+                                easing.type: Easing.OutQuad
+                            }
+                            PauseAnimation {
+                                duration: bubbleItem.riseDuration * 0.70
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: bubbleItem.riseDuration * 0.15
+                                easing.type: Easing.InQuad
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 9. Underwater Effect (Subtle caustics / light rays and floating deep sea particles)
+        Component {
+            id: underwaterComp
+            Item {
+                objectName: "underwater"
+                anchors.fill: parent
+
+                // Ambient aqua overlay gradient
+                Rectangle {
+                    anchors.fill: parent
+                    opacity: (0.12 + ambientLayer.pulse * 0.08) * ((opts.ambient_intensity || 50) / 100)
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.alpha("#3AA8C1", 0.25) }
+                        GradientStop { position: 0.5; color: Qt.alpha("#1B4965", 0.15) }
+                        GradientStop { position: 1.0; color: Qt.alpha("#0B1B3D", 0.35) }
+                    }
+                }
+
+                // Slow sweeping caustic beams from top
+                Repeater {
+                    model: 3
+                    Rectangle {
+                        id: rayBeam
+                        readonly property real rayWidth: parent.width * 0.35
+                        width: rayWidth
+                        height: parent.height * 1.2
+                        y: -parent.height * 0.1
+                        x: (index * parent.width * 0.32)
+                        rotation: -8 + index * 8
+                        opacity: (0.14 + ambientLayer.pulse * 0.10) * ((opts.ambient_intensity || 50) / 100)
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Qt.alpha("#A8E6CF", 0.40) }
+                            GradientStop { position: 0.4; color: Qt.alpha("#72D6EC", 0.20) }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: rayBeam.x + 35
+                                duration: (6000 + index * 1800) / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: rayBeam.x - 35
+                                duration: (6000 + index * 1800) / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+                    }
+                }
+
+                // Plankton / tiny light specks
+                Repeater {
+                    model: 12
+                    Item {
+                        id: speckItem
+                        readonly property real startX: (index * 53) % Math.max(100, ambientLayer.width)
+                        readonly property real floatDuration: Math.max(2800, (6500 + (index * 370) % 2800) / ambientLayer.tempoScale)
+                        readonly property real speckSize: 2.5 + (index % 3) * 1.2
+                        readonly property real baseAlpha: 0.35 + (index % 3) * 0.15
+
+                        width: speckSize
+                        height: speckSize
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: Qt.alpha("#80E5FF", 0.85)
+                        }
+
+                        NumberAnimation on y {
+                            from: ambientLayer.height + 15
+                            to: -15
+                            duration: speckItem.floatDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: speckItem.startX + 18
+                                duration: 2500 / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: speckItem.startX - 18
+                                duration: 2500 / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: speckItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: speckItem.floatDuration * 0.20
+                                easing.type: Easing.OutQuad
+                            }
+                            PauseAnimation {
+                                duration: speckItem.floatDuration * 0.60
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: speckItem.floatDuration * 0.20
+                                easing.type: Easing.InQuad
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 10. Shooting Stars Effect (Twinkling starry background with dynamic shooting star meteors)
+        Component {
+            id: shootingStarsComp
+            Item {
+                objectName: "shooting_stars"
+                anchors.fill: parent
+
+                // Background twinkling stars
+                Repeater {
+                    model: 14
+                    Item {
+                        id: bgStar
+                        readonly property real startX: (index * 67 + 23) % Math.max(100, ambientLayer.width)
+                        readonly property real startY: (index * 47 + 19) % Math.max(100, ambientLayer.height)
+                        readonly property real twinkleDuration: Math.max(900, (1600 + (index * 260) % 1200) / ambientLayer.tempoScale)
+                        readonly property real starSize: 2.2 + (index % 3) * 1.0
+                        readonly property real baseAlpha: 0.38 + (index % 3) * 0.16
+
+                        x: startX
+                        y: startY
+                        width: starSize * 2.2
+                        height: starSize * 2.2
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width
+                            height: parent.height
+                            radius: width / 2
+                            color: Qt.alpha(opts.glow_color, 0.25)
+                            scale: 1.0 + ambientLayer.pulse * 0.30
+                        }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: bgStar.starSize
+                            height: bgStar.starSize
+                            radius: width / 2
+                            color: (index % 2 === 0) ? "#FFFFFF" : "#E3F2FD"
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: bgStar.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: bgStar.twinkleDuration * 0.5
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: Math.max(0.12, bgStar.baseAlpha * 0.35) * ((opts.ambient_intensity || 50) / 100)
+                                duration: bgStar.twinkleDuration * 0.5
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+                    }
+                }
+
+                Repeater {
+                    model: 4
+                    Item {
+                        id: meteorItem
+                        readonly property real startX: ((index * 220) % Math.max(100, ambientLayer.width * 0.75)) + 40
+                        readonly property real startY: ((index * 65) % Math.max(60, ambientLayer.height * 0.35)) + 15
+                        readonly property real travelDist: 180 + (index * 35) % 90
+                        readonly property real streakDuration: Math.max(550, 750 / ambientLayer.tempoScale)
+                        readonly property real pauseDuration: 1800 + index * 900
+                        readonly property real streakWidth: 60 + (index % 3) * 20
+                        readonly property color starColor: (index % 2 === 0) ? opts.glow_color : "#E8F4FF"
+
+                        x: startX
+                        y: startY
+                        width: streakWidth
+                        height: 2.2
+                        rotation: 32
+                        transformOrigin: Item.Left
+
+                        // Tapered luminous tail
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 1
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.65; color: Qt.alpha(meteorItem.starColor, 0.45) }
+                                GradientStop { position: 1.0; color: Qt.alpha("#FFFFFF", 0.95) }
+                            }
+                        }
+
+                        // Bright leading head
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 3.5
+                            height: 3.5
+                            radius: width / 2
+                            color: "#FFFFFF"
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            PauseAnimation { duration: meteorItem.pauseDuration }
+                            NumberAnimation {
+                                from: 0
+                                to: 0.90 * ((opts.ambient_intensity || 50) / 100)
+                                duration: meteorItem.streakDuration * 0.25
+                                easing.type: Easing.OutQuad
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: meteorItem.streakDuration * 0.75
+                                easing.type: Easing.InQuad
+                            }
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            PauseAnimation { duration: meteorItem.pauseDuration }
+                            NumberAnimation {
+                                from: meteorItem.startX
+                                to: meteorItem.startX + meteorItem.travelDist
+                                duration: meteorItem.streakDuration
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+
+                        SequentialAnimation on y {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            PauseAnimation { duration: meteorItem.pauseDuration }
+                            NumberAnimation {
+                                from: meteorItem.startY
+                                to: meteorItem.startY + (meteorItem.travelDist * 0.62)
+                                duration: meteorItem.streakDuration
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 11. Embers Effect (Fiery glowing embers drifting upward and curling)
+        Component {
+            id: embersComp
+            Item {
+                objectName: "embers"
+                anchors.fill: parent
+                transform: Translate { x: ambientLayer.gust * 22 }
+
+                Repeater {
+                    model: 16
+                    Item {
+                        id: emberItem
+                        readonly property real startX: (index * 49) % Math.max(100, ambientLayer.width)
+                        readonly property real floatDuration: Math.max(1600, (4200 + (index * 380) % 2800) / ambientLayer.tempoScale)
+                        readonly property real swayAmp: 16 + (index * 5) % 20
+                        readonly property real swayDuration: Math.max(850, (1600 + (index * 260) % 1200) / ambientLayer.tempoScale)
+                        readonly property real emberSize: 3.0 + (index % 3) * 1.5
+                        readonly property real baseAlpha: 0.55 + (index % 3) * 0.18
+                        readonly property var emberColors: ["#FF4500", "#FF6B35", "#FFA600", "#FF3300", "#FF8C42", opts.glow_color]
+                        readonly property color emberColor: emberColors[index % emberColors.length]
+
+                        width: emberSize * 2.8
+                        height: emberSize * 2.8
+
+                        // Outer warm halo
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width
+                            height: parent.height
+                            radius: width / 2
+                            color: Qt.alpha(emberItem.emberColor, 0.30)
+                            scale: 1.0 + ambientLayer.pulse * 0.35
+                        }
+
+                        // Hot inner core
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: emberItem.emberSize
+                            height: emberItem.emberSize
+                            radius: width / 2
+                            color: (index % 2 === 0) ? "#FFF0B8" : emberItem.emberColor
+                        }
+
+                        NumberAnimation on y {
+                            from: ambientLayer.height + 20
+                            to: -20
+                            duration: emberItem.floatDuration
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: emberItem.startX + emberItem.swayAmp
+                                duration: emberItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: emberItem.startX - emberItem.swayAmp
+                                duration: emberItem.swayDuration
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                from: 0
+                                to: emberItem.baseAlpha * ((opts.ambient_intensity || 50) / 100)
+                                duration: emberItem.floatDuration * 0.15
+                                easing.type: Easing.OutQuad
+                            }
+                            PauseAnimation {
+                                duration: emberItem.floatDuration * 0.65
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: emberItem.floatDuration * 0.20
+                                easing.type: Easing.InQuad
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 12. Light Beams Effect (Soft theatrical volumetric light shafts dynamically tuned to album color)
+        Component {
+            id: lightBeamsComp
+            Item {
+                objectName: "light_beams"
+                anchors.fill: parent
+
+                Repeater {
+                    model: 3
+                    Item {
+                        id: beamItem
+                        readonly property real beamWidth: Math.max(140, ambientLayer.width * 0.32)
+                        readonly property real baseOffset: (index * ambientLayer.width * 0.30)
+                        readonly property color beamColor: (index === 0) ? cinematic.albumColor : ((index === 1) ? opts.glow_color : Qt.lighter(cinematic.albumColor, 1.2))
+
+                        x: baseOffset - 30
+                        y: -30
+                        width: beamWidth
+                        height: ambientLayer.height * 1.3
+                        rotation: -14 + index * 12
+                        transformOrigin: Item.TopCenter
+                        opacity: (0.18 + ambientLayer.pulse * 0.12) * ((opts.ambient_intensity || 50) / 100)
+
+                        Rectangle {
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.alpha(beamItem.beamColor, 0.42) }
+                                GradientStop { position: 0.5; color: Qt.alpha(beamItem.beamColor, 0.18) }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: beamItem.baseOffset + 45
+                                duration: (9000 + index * 2500) / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: beamItem.baseOffset - 45
+                                duration: (9000 + index * 2500) / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+
+                        SequentialAnimation on rotation {
+                            loops: Animation.Infinite
+                            running: root.Window.window && root.Window.window.visible && root.state.playing
+                            NumberAnimation {
+                                to: -14 + index * 12 + 6
+                                duration: (11000 + index * 3000) / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: -14 + index * 12 - 6
+                                duration: (11000 + index * 3000) / ambientLayer.tempoScale
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
     // Native dragging keeps positioning correct across monitors and DPI scales.
     MouseArea {

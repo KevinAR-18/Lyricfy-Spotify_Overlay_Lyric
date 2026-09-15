@@ -24,13 +24,18 @@ RANGES = {
 CHOICES = {
     "alignment": ("left", "center", "right"),
     "background": ("transparent", "solid", "gradient", "album"),
-    "ambient_effect": ("none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"),
+    "ambient_effect": (
+        "none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust",
+        "sakura", "bubbles", "underwater", "shooting_stars", "embers", "light_beams",
+    ),
 }
 
 
 def needs_artwork(options: dict) -> bool:
     return bool(options.get("show_cover") or options.get("background") == "album"
-                or options.get("ambient_effect") in ("leaves", "rain", "fireflies", "blobs", "stardust"))
+                or options.get("ambient_effect") in (
+                    "leaves", "rain", "fireflies", "blobs", "stardust", "light_beams",
+                ))
 
 
 def normalize_options(value: object) -> dict:

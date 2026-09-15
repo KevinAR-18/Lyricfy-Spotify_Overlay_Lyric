@@ -36,6 +36,12 @@ CHOICE_LABELS = {
         "fireflies": "Fireflies",
         "blobs": "Fluid Color Blobs",
         "stardust": "Stardust",
+        "sakura": "Cherry Blossoms (Sakura)",
+        "bubbles": "Floating Bubbles",
+        "underwater": "Underwater",
+        "shooting_stars": "Shooting Stars",
+        "embers": "Fiery Embers",
+        "light_beams": "Light Beams",
     },
 }
 
