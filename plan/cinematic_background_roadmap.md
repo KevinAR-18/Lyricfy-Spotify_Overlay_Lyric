@@ -13,7 +13,7 @@ Dokumen ini berisi rangkuman arsitektur saat ini dan roadmap pengembangan fitur 
   * Layer ambient tidak memakai clipping eksplisit; gust menggunakan `Translate` agar tidak berbenturan dengan anchors.
 * **`src/lyric_overlay/cinematic/preferences.py` & `settings.py`**:
   * Opsi persisten di `.env`:
-    * `ambient_effect`: `["none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust"]` (Aurora telah dihapus; konfigurasi lama `aurora` dinormalisasi menjadi `none`)
+    * `ambient_effect`: `["none", "leaves", "snowfall", "rain", "fireflies", "blobs", "stardust", "sakura", "bubbles", "underwater", "shooting_stars", "embers", "light_beams"]` (Aurora telah dihapus; konfigurasi lama `aurora` dinormalisasi menjadi `none`)
     * `ambient_intensity`: `10` – `100%` (mengontrol opasitas & kontras partikel).
 * **Sistem Reaksi Aliran Lirik**:
   * Trigger: Pergantian baris, pergantian lagu (termasuk indeks yang sama), dan resume playback.
@@ -36,6 +36,18 @@ Dokumen ini berisi rangkuman arsitektur saat ini dan roadmap pengembangan fitur 
    * Partikel cahaya keemasan/hijau neon yang melayang perlahan dengan kedipan berdenyut alami.
 4. **Fluid Lava / Color Blobs (Gelombang Warna Organik)** (`blobs`)
    * Pendaran bola cahaya dinamis menyatu di belakang lirik yang bereaksi terhadap warna album.
+5. **Sakura (Kelopak Bunga Sakura)** (`sakura`)
+   * Kelopak merah muda bergoyang anggun saat melayang turun dengan hembusan angin.
+6. **Bubbles (Gelembung Mengapung)** (`bubbles`)
+   * Gelembung transparan berkilau melayang naik perlahan dengan goyangan halus.
+7. **Underwater (Pemandangan Bawah Air)** (`underwater`)
+   * Gradien laut dalam, berkas cahaya caustics dari atas, dan partikel plankton bercahaya.
+8. **Shooting Stars (Bintang Jatuh)** (`shooting_stars`)
+   * Latar bintang berkedip dengan meteor berekor cahaya yang melintas secara dinamis.
+9. **Embers (Bara Api Melayang)** (`embers`)
+   * Percikan bara api oranye/merah panas yang melayang naik dan memudar perlahan.
+10. **Light Beams (Sorotan Cahaya Teatrikal)** (`light_beams`)
+    * Sorotan cahaya volumetrik lebar yang menyapu lembut mengikuti palet warna album.
 
 ---
 
