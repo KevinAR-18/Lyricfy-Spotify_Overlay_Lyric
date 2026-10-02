@@ -4,6 +4,8 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 
 ## Features
 
+- Optional Cinematic lyric readability toggle with adaptive dark backdrops, improved text contrast, and soft shadows; off by default, with live preview and saved preferences
+
 - Reads the currently playing track from Spotify
 - Displays synced lyrics using Spotify playback progress
 - Checks local `.lrc` files first, then falls back to LRCLIB
