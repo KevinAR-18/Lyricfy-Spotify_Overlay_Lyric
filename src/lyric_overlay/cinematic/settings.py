@@ -25,6 +25,7 @@ LABELS = {
     "motion": "Motion intensity (%)", "show_info": "Show title and artist",
     "show_cover": "Show album cover",
     "ambient_effect": "Ambient effect", "ambient_intensity": "Ambient intensity (%)",
+    "improve_readability": "Improve lyric readability",
 }
 
 CHOICE_LABELS = {
@@ -59,7 +60,7 @@ class CinematicEditor(QWidget):
         layout.addWidget(note)
         groups = {
             "Typography": ("font_family", "font_size", "bold", "alignment"),
-            "Lyric colors": ("active_color", "previous_color", "next_color", "context_opacity"),
+            "Lyric colors": ("active_color", "previous_color", "next_color", "context_opacity", "improve_readability"),
             "Layout": ("text_width", "padding", "gap"),
             "Background": ("background", "background_color", "gradient_color", "background_motion"),
             "Motion & glow": ("duration", "motion", "glow_color", "glow_strength", "vignette"),
@@ -87,6 +88,8 @@ class CinematicEditor(QWidget):
             control.currentFontChanged.connect(lambda font, k=key: self.update_option(k, font.family()))
         elif isinstance(default, bool):
             control = QCheckBox()
+            if key == "improve_readability":
+                control.setToolTip("Adds an adaptive dark lyric backdrop, clearer text contrast, and a soft shadow. Off by default.")
             control.setChecked(value)
             control.toggled.connect(lambda checked, k=key: self.update_option(k, checked))
         elif key in RANGES:

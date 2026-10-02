@@ -14,6 +14,27 @@ Item {
     property bool fullscreen: root.Window.window && root.Window.window.visibility === Window.FullScreen
     readonly property real textWidth: Math.max(80, Math.min(opts.text_width, width - opts.padding * 2))
     readonly property bool hasBackground: opts.background !== "transparent"
+    readonly property bool improveReadability: opts.improve_readability === true
+    readonly property color readabilityBackground: opts.background === "album" ? cinematic.albumColor
+        : opts.background === "gradient" ? opts.gradient_color : opts.background_color
+    readonly property real readabilityBackdropOpacity: opts.background === "transparent" ? 0.46
+        : Math.min(0.62, 0.30 + luminance(readabilityBackground) * 0.26
+                   + ((opts.ambient_effect || "none") !== "none" ? opts.ambient_intensity / 100 * 0.06 : 0))
+
+    function luminance(value) {
+        return value.r * 0.2126 + value.g * 0.7152 + value.b * 0.0722
+    }
+
+    function readableColor(value) {
+        if (!root.improveReadability)
+            return value
+        var base = Qt.tint(value, "#00000000")
+        var lightness = luminance(base)
+        var lift = lightness < 0.72 ? (0.72 - lightness) / (1 - lightness) : 0
+        return Qt.rgba(base.r + (1 - base.r) * lift,
+                       base.g + (1 - base.g) * lift,
+                       base.b + (1 - base.b) * lift, base.a)
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -1361,8 +1382,19 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 font.family: opts.font_family
                 font.pixelSize: opts.font_size
-                color: opts.active_color
+                color: root.readableColor(opts.active_color)
                 opacity: 0.8
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -10
+                    z: -1
+                    radius: 12
+                    color: "#08090D"
+                    opacity: root.readabilityBackdropOpacity
+                    visible: root.improveReadability
+                }
+                style: root.improveReadability ? Text.Raised : Text.Normal
+                styleColor: "#99000000"
             }
         }
     }
@@ -1384,9 +1416,21 @@ Item {
             font.bold: opts.bold
             horizontalAlignment: opts.alignment === "left" ? Text.AlignLeft : opts.alignment === "right" ? Text.AlignRight : Text.AlignHCenter
             transformOrigin: opts.alignment === "left" ? Item.Left : opts.alignment === "right" ? Item.Right : Item.Center
-            color: role === 0 ? opts.active_color : role < 0 ? opts.previous_color : opts.next_color
+            color: root.readableColor(role === 0 ? opts.active_color : role < 0 ? opts.previous_color : opts.next_color)
             opacity: 0
             scale: 0.82
+            Rectangle {
+                objectName: "readabilityBackdrop"
+                anchors.fill: parent
+                anchors.margins: -10
+                z: -1
+                radius: 12
+                color: "#08090D"
+                opacity: root.readabilityBackdropOpacity
+                visible: root.improveReadability
+            }
+            style: root.improveReadability ? Text.Raised : Text.Normal
+            styleColor: "#99000000"
             layer.enabled: opts.glow_strength > 0 && Math.abs(role) <= 1
             layer.effect: MultiEffect {
                 shadowEnabled: true

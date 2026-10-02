@@ -13,6 +13,7 @@ DEFAULTS = {
     "glow_color": "#DAC5FF", "glow_strength": 12, "vignette": 25,
     "duration": 400, "motion": 100, "show_info": True, "show_cover": False,
     "ambient_effect": "none", "ambient_intensity": 50,
+    "improve_readability": False,
 }
 RANGES = {
     "font_size": (16, 100), "context_opacity": (0, 100),
