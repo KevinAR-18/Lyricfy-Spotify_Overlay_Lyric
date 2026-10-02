@@ -36,11 +36,51 @@ def test_preferences_roundtrip_handles_font_quotes_and_interpolation(tmp_path, m
     monkeypatch.setattr(config_module, "ENV_FILE", path)
     config = default_config()
     config.cinematic_enabled = True
-    config.cinematic_options.update(font_family="Kevin's ${FONT} \\ serif", active_color="#80ffaa33")
+    config.cinematic_options.update(font_family="Kevin's ${FONT} \\ serif", active_color="#80ffaa33", improve_readability=True)
     config_module.save_config(config)
     values = dotenv_values(path)
     assert values["CINEMATIC_ENABLED"] == "true"
     assert decode_options(values["CINEMATIC_OPTIONS"]) == normalize_options(config.cinematic_options)
+
+
+def test_readability_toggle_previews_contrast_and_restores_custom_color(app):
+    from lyric_overlay.cinematic.settings import CinematicEditor
+
+    options = dict(DEFAULTS, active_color="#202030", background="solid", background_color="#ffffff")
+    window = CinematicWindow(options)
+    settings = CinematicEditor(options)
+    settings.preview.connect(window.bridge.set_options)
+    try:
+        window.show()
+        window.bridge.set_frame(frame())
+        QTest.qWait(500)
+        root = window.rootObject()
+        active = next(b for b in _blocks(window) if b.property("role") == 0)
+        backdrop = active.findChild(QObject, "readabilityBackdrop")
+        original = active.property("color")
+        assert not settings.controls["improve_readability"].isChecked()
+        assert not backdrop.property("visible")
+
+        settings.controls["improve_readability"].setChecked(True)
+        QTest.qWait(500)
+        assert root.property("improveReadability")
+        assert backdrop.property("visible")
+        assert active.property("color").lightnessF() > original.lightnessF()
+        light_opacity = root.property("readabilityBackdropOpacity")
+        settings.update_option("background_color", "#000000")
+        QTest.qWait(50)
+        assert root.property("readabilityBackdropOpacity") < light_opacity
+        assert QColor(settings.options["active_color"]) == QColor("#202030")
+
+        settings.controls["improve_readability"].setChecked(False)
+        QTest.qWait(500)
+        assert not backdrop.property("visible")
+        assert active.property("color") == original
+    finally:
+        settings.deleteLater()
+        window.hide()
+        window.deleteLater()
+        app.processEvents()
 
 
 def test_preferences_validate_corrupt_values():
