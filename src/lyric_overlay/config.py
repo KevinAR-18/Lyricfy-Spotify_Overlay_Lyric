@@ -8,6 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .cinematic.preferences import DEFAULTS, decode_options, encode_options
+from .settings_theme import normalize_theme
 
 
 def _repo_base_dir() -> Path:
@@ -105,6 +106,13 @@ class AppConfig:
     lyric_font_size: int = 11
     text_alignment: str = "left"
     display_style: str = CARD_DISPLAY_STYLE
+    placement: str = "free"
+    placement_screen: str = ""
+    settings_theme: str = "midnight"
+    taskbar_manual: bool = False
+    taskbar_width: int = 620
+    taskbar_left: int = 5
+    taskbar_bottom: int = 5
     lyric_lines: str = SINGLE_LYRIC_LINES
     track_info_mode: str = TRACK_CHANGE_INFO_MODE
     show_album_cover: bool = False
@@ -154,6 +162,11 @@ def default_config() -> AppConfig:
     )
 
 
+def _normalize_placement(value: str) -> str:
+    value = value.strip().lower()
+    return value if value in {"free", "top", "taskbar_left"} else "free"
+
+
 def load_config() -> AppConfig:
     # Prioritas utama adalah .env di folder runtime/app data.
     # Jika belum ada, fallback ke .env di base directory.
@@ -186,6 +199,13 @@ def load_config() -> AppConfig:
         lyric_font_size=int(os.getenv("LYRIC_FONT_SIZE", "11")),
         text_alignment=_normalize_text_alignment(os.getenv("TEXT_ALIGNMENT", "left")),
         display_style=_normalize_display_style(os.getenv("DISPLAY_STYLE", CARD_DISPLAY_STYLE)),
+        placement=_normalize_placement(os.getenv("OVERLAY_PLACEMENT", "free")),
+        placement_screen=os.getenv("OVERLAY_PLACEMENT_SCREEN", "").strip(),
+        settings_theme=normalize_theme(os.getenv("SETTINGS_THEME", "midnight").strip()),
+        taskbar_manual=os.getenv("TASKBAR_MANUAL", "false").lower() == "true",
+        taskbar_width=_parse_int(os.getenv("TASKBAR_WIDTH"), default=620, minimum=96, maximum=1200),
+        taskbar_left=_parse_int(os.getenv("TASKBAR_LEFT"), default=5, minimum=0, maximum=8000),
+        taskbar_bottom=_parse_int(os.getenv("TASKBAR_BOTTOM"), default=5, minimum=0, maximum=2000),
         lyric_lines=_normalize_lyric_lines(os.getenv("LYRIC_LINES", SINGLE_LYRIC_LINES)),
         track_info_mode=_normalize_track_info_mode(
             os.getenv("TRACK_INFO_MODE", TRACK_CHANGE_INFO_MODE)
@@ -319,6 +339,13 @@ def save_config(config: AppConfig) -> None:
         f"LYRIC_FONT_SIZE={config.lyric_font_size}",
         f"TEXT_ALIGNMENT={_normalize_text_alignment(config.text_alignment)}",
         f"DISPLAY_STYLE={_normalize_display_style(config.display_style)}",
+        f"OVERLAY_PLACEMENT={_normalize_placement(config.placement)}",
+        f"OVERLAY_PLACEMENT_SCREEN={config.placement_screen}",
+        f"SETTINGS_THEME={normalize_theme(config.settings_theme)}",
+        f"TASKBAR_MANUAL={str(config.taskbar_manual).lower()}",
+        f"TASKBAR_WIDTH={config.taskbar_width}",
+        f"TASKBAR_LEFT={config.taskbar_left}",
+        f"TASKBAR_BOTTOM={config.taskbar_bottom}",
         f"LYRIC_LINES={_normalize_lyric_lines(config.lyric_lines)}",
         f"TRACK_INFO_MODE={_normalize_track_info_mode(config.track_info_mode)}",
         f"SHOW_ALBUM_COVER={'true' if config.show_album_cover else 'false'}",

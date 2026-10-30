@@ -121,7 +121,7 @@ def test_classic_theme_and_live_lyrics_survive_settings_animation(overlay):
     overlay.toggle_settings()
     assert overlay._resize_animation.state() == QAbstractAnimation.State.Running
     assert overlay._compact_text_widget.isVisible()
-    assert not overlay.settings_panel.styleSheet()
+    assert "#141820" in overlay.settings_panel.styleSheet()
     assert overlay._overlay_background_qcolor() == QColor(config.overlay_bg_color)
     assert overlay._overlay_corner_radius == 18
     QTest.qWait(280)

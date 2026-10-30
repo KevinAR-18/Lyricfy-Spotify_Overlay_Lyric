@@ -49,6 +49,8 @@ from .config import (
     display_preset_values,
 )
 from .models import TrackInfo
+from .placement import dock_geometry
+from .settings_theme import PALETTES, normalize_theme, settings_stylesheet
 
 
 def shortcuts_guide_lines() -> list[tuple[str, str]]:
@@ -216,6 +218,7 @@ class OverlayWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._loading_settings = False
+        self._settings_theme = "midnight"
         self._saved_config = default_config()
         self._compact_saved_position = None
         self._panel_animating = False
@@ -224,6 +227,7 @@ class OverlayWindow(QWidget):
         self._dragging = False
         self._layout_refresh_pending = False
         self._initial_positioned = False
+        self._dock_initializing = True
         self._expanded = False
         self._snap_pos = None
         self._user_positioned = False
@@ -248,6 +252,16 @@ class OverlayWindow(QWidget):
         self._lyric_font_size = 11
         self._text_alignment = "left"
         self._display_style = CARD_DISPLAY_STYLE
+        self._placement = "free"
+        self._placement_screen = ""
+        self._taskbar_manual = False
+        self._taskbar_width = 620
+        self._taskbar_left = 5
+        self._taskbar_bottom = 5
+        self._taskbar_area = None
+        self._taskbar_detection_key = None
+        self._taskbar_detection_time = 0.0
+        self._taskbar_candidate = None
         self._lyric_lines = SINGLE_LYRIC_LINES
         self._track_info_mode = TRACK_CHANGE_INFO_MODE
         self._show_album_cover = False
@@ -268,6 +282,9 @@ class OverlayWindow(QWidget):
         self._resize_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._resize_animation.valueChanged.connect(self._panel_animation_frame)
         self._resize_animation.finished.connect(self._finish_panel_animation)
+        self._dock_animation = QPropertyAnimation(self, b"geometry", self)
+        self._dock_animation.setDuration(180)
+        self._dock_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._topmost_timer = QTimer(self)
         self._topmost_timer.setInterval(100)
         self._topmost_timer.timeout.connect(self._keep_topmost_above_shell)
@@ -275,6 +292,10 @@ class OverlayWindow(QWidget):
         self._transient_refresh_timer.setSingleShot(True)
         self._transient_refresh_timer.timeout.connect(self._refresh_timed_overlay_state)
         self._build_ui()
+        self._placement_timer = QTimer(self)
+        self._placement_timer.setInterval(1000)
+        self._placement_timer.timeout.connect(self._refresh_placement)
+        self._placement_timer.start()
         self._settings_shortcut = QShortcut(QKeySequence("Shift+S"), self)
         self._settings_shortcut.activated.connect(self.toggle_settings)
         self._hide_shortcut = QShortcut(QKeySequence("Shift+F"), self)
@@ -362,6 +383,14 @@ class OverlayWindow(QWidget):
         self.display_style_input = QComboBox()
         self.display_style_input.addItem("Card", CARD_DISPLAY_STYLE)
         self.display_style_input.addItem("Floating Text", FLOATING_DISPLAY_STYLE)
+        self.placement_input = QComboBox()
+        self.placement_input.addItem("Free Floating", "free")
+        self.placement_input.addItem("Top Dock", "top")
+        self.placement_input.addItem("Taskbar Left (inside taskbar)", "taskbar_left")
+        self.placement_screen_input = QComboBox()
+        self.placement_screen_input.addItem("Current monitor", "")
+        for screen in QApplication.screens():
+            self.placement_screen_input.addItem(screen.name(), screen.name())
         self.lyric_lines_input = QComboBox()
         self.lyric_lines_input.addItem("Single Line", SINGLE_LYRIC_LINES)
         self.lyric_lines_input.addItem("Current + Next", CURRENT_NEXT_LYRIC_LINES)
@@ -606,6 +635,7 @@ class OverlayWindow(QWidget):
             }}
             """
         )
+        self.settings_panel.setStyleSheet(settings_stylesheet(self._settings_theme))
         self.compact_label.setObjectName("compactLyric")
         self.compact_label.style().unpolish(self.compact_label)
         self.compact_label.style().polish(self.compact_label)
@@ -682,6 +712,11 @@ class OverlayWindow(QWidget):
 
     def load_config_values(self, config: AppConfig) -> None:
         self._loading_settings = True
+        self._settings_theme = normalize_theme(config.settings_theme)
+        self._taskbar_manual = config.taskbar_manual
+        self._taskbar_width = config.taskbar_width
+        self._taskbar_left = config.taskbar_left
+        self._taskbar_bottom = config.taskbar_bottom
         self._saved_config = deepcopy(config)
         from .cinematic.preferences import normalize_options
         self._saved_config.cinematic_options = normalize_options(config.cinematic_options)
@@ -694,6 +729,8 @@ class OverlayWindow(QWidget):
         self._lyric_font_size = max(8, config.lyric_font_size or 11)
         self._text_alignment = config.text_alignment or "left"
         self._display_style = config.display_style or CARD_DISPLAY_STYLE
+        self._placement = config.placement
+        self._placement_screen = config.placement_screen
         self._lyric_lines = config.lyric_lines or SINGLE_LYRIC_LINES
         self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
         self._track_info_gap_px = max(0, min(24, config.track_info_gap_px))
@@ -701,6 +738,13 @@ class OverlayWindow(QWidget):
         self.font_size_input.setValue(self._lyric_font_size)
         self._set_alignment_selection(self._text_alignment)
         self._set_combo_data(self.display_style_input, self._display_style)
+        self._set_combo_data(self.placement_input, self._placement)
+        self._set_combo_data(self.placement_screen_input, self._placement_screen)
+        self.taskbar_manual_input.setChecked(config.taskbar_manual)
+        self._set_combo_data(self.settings_theme_input, self._settings_theme)
+        self.taskbar_width_input.setValue(config.taskbar_width)
+        self.taskbar_left_input.setValue(config.taskbar_left)
+        self.taskbar_bottom_input.setValue(config.taskbar_bottom)
         self._set_combo_data(self.lyric_lines_input, self._lyric_lines)
         self._set_combo_data(self.track_info_mode_input, self._track_info_mode)
         self._set_combo_data(self.display_preset_input, display_preset_for(config))
@@ -768,6 +812,13 @@ class OverlayWindow(QWidget):
             lyric_font_size=self.font_size_input.value(),
             text_alignment=self.text_alignment_input.currentData(),
             display_style=self.display_style_input.currentData(),
+            placement=self.placement_input.currentData(),
+            placement_screen=self.placement_screen_input.currentData(),
+            settings_theme=self.settings_theme_input.currentData(),
+            taskbar_manual=self.taskbar_manual_input.isChecked(),
+            taskbar_width=self.taskbar_width_input.value(),
+            taskbar_left=self.taskbar_left_input.value(),
+            taskbar_bottom=self.taskbar_bottom_input.value(),
             lyric_lines=self.lyric_lines_input.currentData(),
             track_info_mode=self.track_info_mode_input.currentData(),
             show_album_cover=self.show_album_cover_checkbox.isChecked(),
@@ -784,6 +835,11 @@ class OverlayWindow(QWidget):
         )
 
     def apply_config_theme(self, config: AppConfig) -> None:
+        self._settings_theme = normalize_theme(config.settings_theme)
+        self._taskbar_manual = config.taskbar_manual
+        self._taskbar_width = config.taskbar_width
+        self._taskbar_left = config.taskbar_left
+        self._taskbar_bottom = config.taskbar_bottom
         self._overlay_bg_color = config.overlay_bg_color or "#0A0A0AEB"
         self._overlay_text_color = config.overlay_text_color or "#F4F4F4"
         self._lyric_text_color = config.lyric_text_color or "#F4F4F4"
@@ -793,6 +849,8 @@ class OverlayWindow(QWidget):
         self._lyric_font_size = max(8, config.lyric_font_size or 11)
         self._text_alignment = config.text_alignment or "left"
         self._display_style = config.display_style or CARD_DISPLAY_STYLE
+        self._placement = config.placement
+        self._placement_screen = config.placement_screen
         self._lyric_lines = config.lyric_lines or SINGLE_LYRIC_LINES
         self._track_info_mode = config.track_info_mode or TRACK_CHANGE_INFO_MODE
         self._show_album_cover = config.show_album_cover
@@ -840,7 +898,8 @@ class OverlayWindow(QWidget):
             self._show_album_cover
             and not self._expanded
             and self._album_cover_source is not None
-            and (self._display_style == CARD_DISPLAY_STYLE or floating_visible)
+            and (self._placement == "taskbar_left" or self._placement == "free" or not self._lyrics_available)
+            and (self._placement == "taskbar_left" or self._display_style == CARD_DISPLAY_STYLE or floating_visible)
         )
         if should_show:
             self.album_cover_label.setPixmap(self._rounded_cover_pixmap(self._album_cover_source))
@@ -877,7 +936,7 @@ class OverlayWindow(QWidget):
     def _sync_album_cover_alignment(self) -> None:
         self._compact_row.setAlignment(
             self.album_cover_label,
-            Qt.AlignmentFlag.AlignVCenter,
+            Qt.AlignmentFlag.AlignBottom if self._placement == "taskbar_left" and not self._expanded else Qt.AlignmentFlag.AlignVCenter,
         )
         self._compact_row.setAlignment(
             self._compact_text_widget,
@@ -934,9 +993,19 @@ class OverlayWindow(QWidget):
 
     def _set_settings_expanded(self, expanded: bool) -> None:
         start = QRect(self.geometry())
+        self._dock_animation.stop()
         self._resize_animation.stop()
         self._panel_animating = True
         self._expanded = expanded
+        self.setWindowOpacity(1.0)
+        if expanded:
+            self.findChild(QWidget, "card").layout().setContentsMargins(16, 12, 16, 12)
+            self.compact_label.setMinimumWidth(0)
+            self.compact_label.setWordWrap(True)
+            line_height = self.compact_label.fontMetrics().lineSpacing()
+            self.compact_label.setMinimumHeight(max(32, line_height + 4))
+            self.compact_label.setMaximumHeight(max(40, line_height * 2 + 6))
+            self.album_cover_label.setFixedSize(self._ALBUM_COVER_SIZE, self._ALBUM_COVER_SIZE)
         self.settings_panel.show()
         self.status_label.setVisible(bool(self._status_text))
         self._compact_text_widget.show()
@@ -983,6 +1052,8 @@ class OverlayWindow(QWidget):
             self.settings_panel.hide()
             self.settings_panel.setMaximumHeight(0)
             self._compact_saved_position = None
+            if self._placement != "free":
+                self._apply_dock_geometry()
 
     def close_settings_panel(self) -> None:
         if not self._expanded:
@@ -1304,6 +1375,7 @@ class OverlayWindow(QWidget):
             self._header_visible_until = time.monotonic() + self._HEADER_VISIBLE_DURATION_SECONDS
         elif not self._lyrics_available:
             self._header_visible_until = 0.0
+        self._sync_album_cover_ui()
         self._refresh_compact_text()
         self._apply_window_mode_if_layout_changed(
             previous_compact_text,
@@ -1328,7 +1400,8 @@ class OverlayWindow(QWidget):
         self._next_line_text = next_line.strip()
         self._refresh_compact_text()
         if (
-            self.compact_label.text() != previous_compact_text
+            (changed and self._placement != "free")
+            or self.compact_label.text() != previous_compact_text
             or self.track_title_label.isVisible() != previous_header_visible
             or self.track_title_label.text() != previous_header_text
         ):
@@ -1364,10 +1437,8 @@ class OverlayWindow(QWidget):
         artist_text = self._artist_text.strip()
         if self._current_line_text:
             compact_text = self._current_line_text
-        elif time.monotonic() < self._no_lyrics_notice_until:
-            compact_text = "No lyric found"
         else:
-            compact_text = title_text or artist_text
+            compact_text = f"{title_text} — {artist_text}" if title_text and artist_text else title_text or artist_text
 
         if self._lyrics_available:
             header_text = f"{title_text} - {artist_text}" if title_text and artist_text else title_text or artist_text
@@ -1378,8 +1449,12 @@ class OverlayWindow(QWidget):
             else:
                 show_small_track = bool(header_text) and time.monotonic() < self._header_visible_until
         else:
-            header_text = artist_text
-            show_small_track = bool(header_text)
+            header_text = ""
+            show_small_track = False
+
+        docked = self._placement != "free" and not self._expanded
+        if docked:
+            show_small_track = False
 
         self.track_title_label.setText(
             self._elide_label_text(
@@ -1389,9 +1464,16 @@ class OverlayWindow(QWidget):
             )
         )
         self.track_title_label.setVisible(show_small_track)
-        self.compact_label.setText(self._format_compact_text(compact_text, available_width=compact_width))
+        if docked and self._lyrics_available and self._current_line_text:
+            text = " ".join(compact_text.split())
+        elif docked or not self._lyrics_available:
+            width = compact_width if compact_width is not None else max(1, self.compact_label.width())
+            text = QFontMetrics(self.compact_label.font()).elidedText(" ".join(compact_text.split()), Qt.TextElideMode.ElideRight, max(1, width))
+        else:
+            text = self._format_compact_text(compact_text, available_width=compact_width)
+        self.compact_label.setText(text)
         show_next = (
-            self._lyrics_available
+            not docked and self._lyrics_available
             and self._lyric_lines == CURRENT_NEXT_LYRIC_LINES
             and bool(self._current_line_text)
             and bool(self._next_line_text)
@@ -1560,6 +1642,10 @@ class OverlayWindow(QWidget):
         self.playback_note.setText("Spotify API uses your Developer app credentials. Apply to connect." if show_oauth_fields else "Reads Spotify from the Windows media session. No Developer credentials required.")
 
     def _sync_overlay_buttons_ui(self) -> None:
+        if self._placement != "free" and not self._expanded:
+            self.settings_button.hide()
+            self.close_button.hide()
+            return
         if self._uses_hover_controls():
             self.settings_button.setVisible(
                 self._expanded or (self._mouse_over_overlay and self._show_settings_button)
@@ -1664,6 +1750,17 @@ class OverlayWindow(QWidget):
         if self._dragging:
             self._layout_refresh_pending = True
             return
+        if self._placement != "free" and not self._expanded:
+            self._apply_dock_geometry()
+            return
+        self.setWindowOpacity(1.0)
+        self._dock_animation.stop()
+        self.compact_label.setMinimumWidth(500)
+        self.findChild(QWidget, "card").layout().setContentsMargins(16, 12, 16, 12)
+        self.compact_label.setWordWrap(True)
+        self.compact_label.setMinimumHeight(max(32, self.compact_label.fontMetrics().lineSpacing() + 4))
+        self.compact_label.setMaximumHeight(max(40, self.compact_label.fontMetrics().lineSpacing() * 2 + 6))
+        self.album_cover_label.setFixedSize(self._ALBUM_COVER_SIZE, self._ALBUM_COVER_SIZE)
         width_bonus = 0 if self._expanded else max(0, self._lyric_font_size - 11) * 16
         target_width = self._target_window_width() + width_bonus
         if self._expanded:
@@ -1685,6 +1782,87 @@ class OverlayWindow(QWidget):
         self._resize_animation.stop()
         self.resize(target_width, target_height)
         self._reposition_after_resize()
+
+    def _refresh_placement(self) -> None:
+        if self._placement != "free" and not self._expanded and not self._panel_animating and not self._hide_requested:
+            self._apply_dock_geometry()
+
+    def _apply_dock_geometry(self) -> None:
+        self._resize_animation.stop()
+        screens = QApplication.screens()
+        screen = next((item for item in screens if item.name() == self._placement_screen), None)
+        screen = screen or self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        area = None
+        if self._placement == "taskbar_left":
+            from .platform.taskbar_windows import taskbar_left_area
+            key = (screen.name(), screen.geometry().getRect(), screen.devicePixelRatio())
+            if not self._taskbar_manual:
+                now = time.monotonic()
+                if key != self._taskbar_detection_key or now - self._taskbar_detection_time >= 0.9:
+                    detected = taskbar_left_area(screen)
+                    if key != self._taskbar_detection_key:
+                        self._taskbar_area = detected
+                    elif detected is not None and detected == self._taskbar_candidate:
+                        self._taskbar_area = detected
+                    self._taskbar_candidate = detected
+                    self._taskbar_detection_key = key
+                    self._taskbar_detection_time = now
+                area = self._taskbar_area
+                if area is not None:
+                    area = area.adjusted(5, 0, 0, 0).translated(0, -5)
+                if area is not None and self.settings_feedback.text().startswith("Start detection unavailable"):
+                    self.settings_feedback.clear()
+            if area is None:
+                geometry = screen.geometry()
+                left = min(self._taskbar_left, max(0, geometry.width() - 96))
+                bottom = geometry.bottom() - min(self._taskbar_bottom, max(0, geometry.height() - 48))
+                area = QRect(geometry.x() + left, bottom - 47,
+                             min(self._taskbar_width if self._taskbar_manual else max(620, self._taskbar_width), geometry.width() - left), 48)
+                if not self._taskbar_manual:
+                    self.settings_feedback.setText("Start detection unavailable; using manual taskbar bounds. Adjust width and insets to avoid Windows controls.")
+        self.setWindowOpacity(1.0)
+        self._sync_album_cover_alignment()
+        card = self.findChild(QWidget, "card")
+        taskbar = self._placement == "taskbar_left"
+        left_padding, top_padding, right_padding, bottom_padding = (0, 6, 16, 0) if taskbar else (16, 6, 16, 6)
+        if card is not None:
+            card.layout().setContentsMargins(left_padding, top_padding, right_padding, bottom_padding)
+        self.status_label.hide()
+        self._sync_overlay_buttons_ui()
+        content = self._current_line_text or " — ".join(filter(None, (self._track_text, self._artist_text)))
+        base_height = min(48, area.height()) if area is not None else 48
+        cover_size = self._ALBUM_COVER_SIZE if taskbar else max(16, base_height - 16)
+        self.album_cover_label.setFixedSize(cover_size, cover_size)
+        if self._album_cover_source is not None and not self.album_cover_label.isHidden():
+            self.album_cover_label.setPixmap(self._rounded_cover_pixmap(self._album_cover_source).scaled(cover_size, cover_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        cover_width = cover_size + 10 if not self.album_cover_label.isHidden() else 0
+        width = area.width() if area is not None else min(480, max(1, screen.availableGeometry().width() - 16))
+        wrap = bool(self._lyrics_available and self._current_line_text)
+        self.compact_label.setWordWrap(wrap)
+        self.compact_label.setMinimumWidth(0)
+        self.compact_label.setMinimumHeight(0)
+        text_width = max(1, width - left_padding - right_padding - cover_width)
+        metrics = QFontMetrics(self.compact_label.font())
+        text_height = metrics.boundingRect(QRect(0, 0, text_width, 100000), Qt.TextFlag.TextWordWrap, " ".join(content.split())).height() if wrap else metrics.lineSpacing()
+        vertical_padding = top_padding + bottom_padding
+        height = min(screen.geometry().height(), max(base_height, text_height + vertical_padding, cover_size + vertical_padding if cover_width else 0))
+        self.compact_label.setMaximumHeight(max(1, height - vertical_padding))
+        self._refresh_compact_text(compact_width=text_width)
+        self.setMinimumSize(0, 0)
+        target = (QRect(area.x(), max(screen.geometry().top(), area.bottom() - height + 1), width, height)
+                  if area is not None else dock_geometry(self._placement, screen.geometry(), screen.availableGeometry(), width, height))
+        self._last_window_size = (width, height)
+        if self._dock_animation.state() == QPropertyAnimation.State.Running and self._dock_animation.endValue() == target:
+            return
+        self._dock_animation.stop()
+        if self.isVisible() and not self._dock_initializing and self.geometry() != target:
+            self._dock_animation.setStartValue(self.geometry())
+            self._dock_animation.setEndValue(target)
+            self._dock_animation.start()
+        else:
+            self.setGeometry(target)
 
     def _target_window_width(self) -> int:
         if not self._expanded:
@@ -1848,6 +2026,20 @@ class OverlayWindow(QWidget):
         if not self._initial_positioned:
             self._apply_window_mode()
             self._initial_positioned = True
+        QTimer.singleShot(0, self._finalize_initial_placement)
+
+    def _finalize_initial_placement(self) -> None:
+        if not self.isVisible() or self._hide_requested or self._expanded or self._panel_animating:
+            return
+        if self._placement != "free":
+            # Native frame removal and the first layout pass can adjust the
+            # geometry after showEvent. Reapply the same anchor once they settle.
+            self._dock_initializing = True
+            self.layout().activate()
+            self._compact_text_layout.activate()
+            self._apply_dock_geometry()
+            self.layout().activate()
+        self._dock_initializing = False
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -1924,6 +2116,8 @@ class OverlayWindow(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(QPen(QColor(255, 255, 255, 18), 1))
         background = self._overlay_background_qcolor()
+        if self._expanded or self._panel_animating:
+            background = QColor(PALETTES[self._settings_theme][0])
         if self._display_style == FLOATING_DISPLAY_STYLE and not self._expanded:
             background.setAlpha(min(background.alpha(), 72))
         painter.setBrush(background)
@@ -1964,6 +2158,8 @@ class OverlayWindow(QWidget):
         super().mouseReleaseEvent(event)
 
     def _prepare_drag(self, global_pos: QPoint) -> None:
+        if self._placement != "free" and not self._expanded:
+            return
         self._drag_press_global = QPoint(global_pos)
         self._drag_start_window_pos = self.pos()
         self._dragging = False
