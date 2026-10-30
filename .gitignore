@@ -23,3 +23,8 @@ releases/**
 release-*.txt
 release_notes_*.txt
 release_notes*.txt
+
+# Local recording tools and intermediate captures; published previews stay tracked.
+/tools/recording/
+/recordings/
+/assets/screenshots/raw/
