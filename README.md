@@ -1,5 +1,7 @@
 # Lyricfy
 
+**Latest release: v1.6.0** — see the [release notes](releases/release-v1.6.0.txt) for docked placement, taskbar layout, artwork, and Settings themes.
+
 Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from the local Windows media session by default, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
 
 ## Preview
@@ -34,7 +36,6 @@ Keep lyrics and optional album artwork visible beside the taskbar.
 ## Features
 
 - Optional Cinematic lyric readability toggle with adaptive dark backdrops, improved text contrast, and soft shadows; off by default, with live preview and saved preferences
-
 - Reads the currently playing track from Spotify
 - Displays synced lyrics using Spotify playback progress
 - Checks local `.lrc` files first, then falls back to LRCLIB
@@ -43,6 +44,10 @@ Keep lyrics and optional album artwork visible beside the taskbar.
 - Batch-downloads `.lrc` files for Spotify liked songs and playlists with read-only API access
 - Retries lyric lookup automatically when a new track does not resolve on the first attempt
 - Compact frameless overlay that stays on top
+- Independent solid Settings palettes: Midnight (default), Graphite, Warm Dark, and Light; lyric overlay colors and transparency remain unchanged
+- Placement options: Free Floating, Top Dock, and Taskbar Left (over the taskbar before Start), with a selectable monitor. Taskbar lyrics wrap upward from a fixed bottom-left anchor. If Start detection fails, adjustable manual bounds keep the overlay visible; adjust the width and insets to avoid Windows controls.
+- Taskbar Left Auto fills the detected free area without a fixed width cap. Manual/fallback width defaults to 620 logical pixels; existing saved widths are preserved. Optional 48 × 48 px album artwork stays visible at the bottom left, including during active lyrics. Windows UI Automation is queried in the background when native Start detection is unavailable.
+- When lyrics are unavailable, track title and artist appear together on one line alongside optional album artwork
 - Three display presets: `Card Default`, `Floating Minimal`, and `Floating Context`
 - Optional smaller next lyric below the active lyric
 - Optional album artwork in Card and Floating modes, with automatic lyric-only fallback
@@ -310,13 +315,14 @@ If Spotify login was already cached before these read-only scopes were added, de
 
 Settings stays inside the existing overlay and provides five scrollable tabs:
 
-| Tab | Controls |
-| --- | --- |
-| General | Windows startup and initial visibility, Settings/Hide buttons, hover controls, shortcut guide, version |
-| Playback | Non-API / Spotify API, Client ID, masked Client Secret with Show/Hide, redirect URI, connection status, reconnect, polling interval |
-| Appearance | Classic / Cinematic presentation, Classic presets and layout, typography, color pickers, artwork, spacing and corner radius |
-| Cinematic | Typography, lyric colors, context opacity, layout, background, motion/glow, ambient effects and track details |
-| Lyrics | Offset, LRCLIB lookup, automatic `.lrc` cache and clear downloaded lyrics |
+
+| Tab        | Controls                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| General    | Windows startup and initial visibility, Settings/Hide buttons, hover controls, shortcut guide, version                              |
+| Playback   | Non-API / Spotify API, Client ID, masked Client Secret with Show/Hide, redirect URI, connection status, reconnect, polling interval |
+| Appearance | Classic / Cinematic presentation, Classic presets and layout, typography, color pickers, artwork, spacing and corner radius         |
+| Cinematic  | Typography, lyric colors, context opacity, layout, background, motion/glow, ambient effects and track details                       |
+| Lyrics     | Offset, LRCLIB lookup, automatic `.lrc` cache and clear downloaded lyrics                                                           |
 
 The expanded panel targets **860 × 720 logical pixels**, clamped to the current
 monitor's available work area with a 32px size allowance. This also accommodates
@@ -493,5 +499,5 @@ The build script packages the app as a one-file windowed executable and includes
 
 ## Author
 
-Created by Stephanus Kevin Andika Rata  
+Created by Stephanus Kevin Andika Rata
 Contact: kevinandika18@gmail.com
