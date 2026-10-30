@@ -2,6 +2,35 @@
 
 Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from the local Windows media session by default, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
 
+## Preview
+
+See synced lyrics in action while Spotify plays, with three placement options to fit your desktop.
+
+### Free Floating
+
+Move the lyric card wherever you like.
+
+![Animated preview of the Free Floating lyric card](assets/screenshots/free-floating.gif)
+
+### Top Dock
+
+Keep the current line at the top of the screen.
+
+![Animated preview of the Top Dock lyric overlay](assets/screenshots/top-dock.gif)
+
+### Taskbar Left
+
+Keep lyrics and optional album artwork visible beside the taskbar.
+
+![Animated preview of Lyricfy showing synced lyrics in the Windows taskbar](assets/screenshots/taskbar-left.gif)
+
+<details>
+<summary>View a still screenshot</summary>
+
+![Lyricfy's Taskbar Left overlay showing album artwork and an active lyric](assets/screenshots/taskbar-left.png)
+
+</details>
+
 ## Features
 
 - Optional Cinematic lyric readability toggle with adaptive dark backdrops, improved text contrast, and soft shadows; off by default, with live preview and saved preferences
