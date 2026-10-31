@@ -1,6 +1,19 @@
 # Lyricfy
 
-**Latest release: v1.6.0** — see the [release notes](releases/release-v1.6.0.txt) for docked placement, taskbar layout, artwork, and Settings themes.
+**Latest release: v1.6.1** — see the [release notes](releases/release-v1.6.1.txt) for lower Classic startup memory, bounded caches, and more efficient artwork handling.
+
+### Memory efficiency in v1.6.1
+
+Classic defers Settings and Qt Quick/QML initialization until needed. Artwork caches are limited to 8 entries / 8 MiB each, and the in-memory lyrics cache retains up to 64 songs; local `.lrc` files are unaffected. Settings is reused after its first opening, and native Cinematic libraries may remain loaded after switching back to Classic.
+
+For reproducible Windows source-runtime measurements without network access or changes to user settings:
+
+```powershell
+.\.venv\Scripts\python.exe tools\measure_memory.py --samples 3
+.\.venv\Scripts\python.exe tools\measure_memory.py --scenario settings --samples 3
+```
+
+The script reports working set and private commit separately. These are not identical to Task Manager's default Memory column; measure packaged builds separately before comparing release RAM usage.
 
 Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from the local Windows media session by default, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
 

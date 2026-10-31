@@ -1,0 +1,20 @@
+# Lyricfy v1.6.1 Release Notes
+
+## Memory Efficiency and Stability
+
+- **Lighter Classic startup:** Qt Quick/QML is loaded only when Cinematic is first used. Settings controls and font selectors are created when Settings is first opened, then reused.
+- **Bounded artwork caches:** Windows thumbnails and downloaded cover caches each retain at most 8 entries and 8 MiB of compressed payload. Windows thumbnail retry metadata is also bounded.
+- **Bounded lyrics cache:** Up to 64 recently used songs are retained in RAM. Existing local and downloaded .lrc files remain available on disk.
+- **Artwork on demand:** Windows thumbnail reads are skipped when neither Classic nor Cinematic needs artwork. Enabling artwork on the current song does not require skipping to another song.
+- **Smaller Classic images:** Covers are decoded near their display size, accounting for screen DPI, rather than retained as full-resolution pixmaps.
+- **No repeated cover decoding:** A successfully loaded cover is not fetched and decoded again on every playback poll.
+- **Bounded background work:** Lyrics and cover fetches each use at most one running request and one replaceable pending request. Rapid track skipping no longer spawns a new fetch thread for every request.
+- **Resource cleanup:** Streamed cover responses and Windows thumbnail streams are closed on success, failure, and cancellation. Cinematic releases scene-graph resources when hidden through the presentation manager.
+- **Safer reconnects:** Fetch request identifiers remain monotonic so results from an earlier connection cannot replace newer playback state.
+
+## Compatibility
+
+- All Classic placements, Cinematic, Spotify API playback, and Windows media-session playback remain available.
+- Existing preferences, Spotify tokens, and .lrc files do not require a reset or migration.
+- Opening Settings or Cinematic for the first time may take slightly longer because initialization is deferred.
+- After Cinematic has been opened, native Qt libraries may remain loaded until exit. RAM is not expected to return exactly to a fresh Classic process.
