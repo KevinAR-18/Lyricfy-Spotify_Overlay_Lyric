@@ -199,11 +199,13 @@ def test_custom_display_selection():
         track_info_mode="always",
     )
     overlay.load_config_values(config)
+    overlay.ensure_settings()
     assert overlay.display_preset_input.currentData() == "custom"
 
 
 def test_card_hover_checkbox_previews_without_save():
     overlay = _overlay()
+    overlay.ensure_settings()
     overlay._mouse_over_overlay = False
     overlay.hover_buttons_checkbox.setChecked(True)
     assert overlay._hover_buttons_enabled is True
@@ -218,6 +220,7 @@ def test_card_hover_checkbox_previews_without_save():
 
 def test_floating_hover_shows_enabled_controls():
     overlay = _overlay()
+    overlay.ensure_settings()
     overlay.hover_buttons_checkbox.setChecked(False)
     overlay.apply_display_preset(FLOATING_MINIMAL_PRESET)
     assert overlay._uses_hover_controls() is True
@@ -265,6 +268,7 @@ def test_floating_hover_can_show_only_hide():
 
 def test_card_hover_respects_disabled_controls():
     overlay = _overlay()
+    overlay.ensure_settings()
     overlay.hover_buttons_checkbox.setChecked(True)
     overlay.set_overlay_buttons_visibility(False, False)
     overlay._mouse_over_overlay = True
@@ -286,6 +290,7 @@ def test_settings_keep_controls_visible_in_floating_mode():
 
 def test_card_preset_restores_saved_hover_preference():
     overlay = _overlay()
+    overlay.ensure_settings()
     overlay.hover_buttons_checkbox.setChecked(True)
     overlay.apply_display_preset(FLOATING_CONTEXT_PRESET)
     overlay.apply_display_preset(CARD_DEFAULT_PRESET)
@@ -340,6 +345,7 @@ def test_album_cover_hides_while_settings_are_open():
 
 def test_corner_radius_preview_updates_state():
     overlay = _overlay()
+    overlay.ensure_settings()
     assert overlay._overlay_corner_radius == 30
     overlay.overlay_corner_radius_input.setValue(12)
     assert overlay._overlay_corner_radius == 12
@@ -349,6 +355,7 @@ def test_corner_radius_preview_updates_state():
 
 def test_track_info_gap_preview_updates_spacing_and_layout():
     overlay = _overlay()
+    overlay.ensure_settings()
     overlay.track_info_gap_input.setValue(12)
     assert overlay._track_info_gap_px == 12
     assert overlay.track_title_label.contentsMargins().top() == 12

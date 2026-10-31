@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -53,7 +54,10 @@ class PlaybackWorker(QObject):
     def _run(self) -> None:
         while not self._stop_event.is_set():
             try:
-                self.refreshed.emit(self.playback_client.get_current_track())
+                track = self.playback_client.get_current_track()
+                if self._stop_event.is_set():
+                    return
+                self.refreshed.emit(track)
             except Exception as exc:  # noqa: BLE001
                 if not self._is_transient_error(exc):
                     self.failed.emit(str(exc))
@@ -64,42 +68,99 @@ class PlaybackWorker(QObject):
 
 
 
-class LyricsWorker(QObject):
+class LatestRequestWorker(QObject):
+    """Keep at most one running and one replaceable pending request."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._request_lock = threading.Lock()
+        self._pending = None
+        self._running = False
+        self._closed = False
+
+    def fetch(self, track: TrackInfo, request_id: int) -> None:
+        with self._request_lock:
+            if self._closed:
+                return
+            self._pending = (track, request_id)
+            if self._running:
+                return
+            self._running = True
+        threading.Thread(target=self._dispatch, daemon=True).start()
+
+    def cancel_pending(self) -> None:
+        with self._request_lock:
+            self._pending = None
+
+    def close(self) -> None:
+        with self._request_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._pending = None
+            idle = not self._running
+        if idle:
+            self._close_repository()
+
+    def _close_repository(self) -> None:
+        repository = getattr(self, "repository", getattr(self, "lyrics_repository", None))
+        close = getattr(repository, "close", None)
+        if close is not None:
+            close()
+
+    def _dispatch(self) -> None:
+        while True:
+            with self._request_lock:
+                request = self._pending
+                self._pending = None
+                if request is None:
+                    self._running = False
+                    closed = self._closed
+                else:
+                    closed = False
+            if request is None:
+                if closed:
+                    self._close_repository()
+                return
+            try:
+                self._run(*request)
+            except Exception:
+                logging.getLogger(__name__).exception("Background fetch failed")
+
+
+class LyricsWorker(LatestRequestWorker):
     fetched = Signal(str, object, int)
 
     def __init__(self, lyrics_repository: LyricsRepository) -> None:
         super().__init__()
         self.lyrics_repository = lyrics_repository
 
-    def fetch(self, track: TrackInfo, request_id: int) -> None:
-        thread = threading.Thread(
-            target=self._run,
-            args=(track, request_id),
-            daemon=True,
-        )
-        thread.start()
-
     def _run(self, track: TrackInfo, request_id: int) -> None:
-        lyrics = self.lyrics_repository.get_lyrics(
-            artist=track.artist,
-            title=track.title,
-            duration_ms=track.duration_ms,
-        )
+        try:
+            lyrics = self.lyrics_repository.get_lyrics(
+                artist=track.artist,
+                title=track.title,
+                duration_ms=track.duration_ms,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception("Lyrics fetch failed")
+            lyrics = LyricsData(source="none", lines=[])
         self.fetched.emit(track.track_id, lyrics, request_id)
 
 
-class CoverArtWorker(QObject):
+class CoverArtWorker(LatestRequestWorker):
     fetched = Signal(str, object, int)
 
     def __init__(self, repository: CoverArtRepository) -> None:
         super().__init__()
         self.repository = repository
 
-    def fetch(self, track: TrackInfo, request_id: int) -> None:
-        threading.Thread(target=self._run, args=(track, request_id), daemon=True).start()
-
     def _run(self, track: TrackInfo, request_id: int) -> None:
-        data = self.repository.get_cover(track)
+        try:
+            data = self.repository.get_cover(track)
+        except Exception:
+            logging.getLogger(__name__).exception("Cover fetch failed")
+            data = None
         self.fetched.emit(track.track_id, data, request_id)
 
 
@@ -125,6 +186,7 @@ class AppController(QObject):
         self.overlay = overlay
         self.config = config
         self.cinematic_cover_preview = False
+        self._sync_artwork_requirement()
         self.sync_engine = SyncEngine()
         self.snapshot = PlaybackSnapshot()
         self.worker: PlaybackWorker | None = None
@@ -159,6 +221,16 @@ class AppController(QObject):
             self.worker.stop()
             self.worker = None
         self._render_timer.stop()
+        self._lyrics_request_id += 1
+        self._cover_request_id += 1
+        self.lyrics_worker.cancel_pending()
+        self.cover_worker.cancel_pending()
+
+    def shutdown(self) -> None:
+        """Close sessions after in-flight fetches finish; do not block the GUI."""
+        self.stop()
+        self.lyrics_worker.close()
+        self.cover_worker.close()
 
     def reconnect(
         self,
@@ -171,8 +243,9 @@ class AppController(QObject):
         self._classic_progress = None
         self.playback_client = playback_client
         self.config = config
+        self._sync_artwork_requirement()
         self.snapshot = PlaybackSnapshot()
-        self._lyrics_request_id = 0
+        self._lyrics_request_id += 1
         self._lyrics_retry_count = 0
         self._lyrics_retry_due_at = 0.0
         self._cover_request_id += 1
@@ -197,6 +270,12 @@ class AppController(QObject):
             return
         if not self._render_timer.isActive():
             self._render_timer.start()
+        track = self.snapshot.track
+        if track is not None:
+            if self.snapshot.lyrics is None or self.snapshot.lyrics.source == "loading":
+                self._request_lyrics(track)
+            if self._needs_cover() and self._cover_retry_due_at:
+                self._request_album_cover(track)
         self._start_worker()
 
     def refresh(self, track: TrackInfo | None) -> None:
@@ -230,9 +309,10 @@ class AppController(QObject):
                 self._request_album_cover(track)
             self._request_lyrics(track)
         else:
+            artwork_arrived = bool(track.cover_data) and not self.snapshot.track.cover_data
             self.snapshot.track = track
             self._retry_lyrics_if_needed(track)
-            if self._needs_cover() and time.monotonic() >= self._cover_retry_due_at:
+            if self._needs_cover() and self._cover_retry_due_at and (artwork_arrived or time.monotonic() >= self._cover_retry_due_at):
                 self._request_album_cover(track)
 
         self._last_track_refresh_at = time.monotonic()
@@ -250,6 +330,8 @@ class AppController(QObject):
         self._render_current_state()
 
     def refresh_album_cover(self) -> None:
+        self._sync_artwork_requirement()
+        self.cover_worker.cancel_pending()
         self._cover_request_id += 1
         self._cover_retry_due_at = 0.0
         self.overlay.set_album_cover(None)
@@ -263,6 +345,11 @@ class AppController(QObject):
             self.config.cinematic_enabled and needs_artwork(self.config.cinematic_options)
         )
 
+    def _sync_artwork_requirement(self) -> None:
+        setter = getattr(self.playback_client, "set_artwork_enabled", None)
+        if setter is not None:
+            setter(self._needs_cover())
+
     def _request_album_cover(self, track: TrackInfo) -> None:
         self._cover_retry_due_at = float("inf")
         self.cover_worker.fetch(track, self._cover_request_id)
@@ -274,7 +361,7 @@ class AppController(QObject):
         if not self._needs_cover():
             return
         self._cover_retry_due_at = 0.0 if data else time.monotonic() + 5.0
-        self.overlay.set_album_cover(data)
+        self.overlay.set_album_cover(data if self.config.show_album_cover else None)
         self.cinematic_artwork.emit(data)
 
     def show_error(self, message: str) -> None:

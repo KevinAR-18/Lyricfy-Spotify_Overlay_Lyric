@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from .config import SPOTIFY_API_PLAYBACK_SOURCE, TOKEN_CACHE, WINDOWS_PLAYBACK_SOURCE
 from .models import TrackInfo
+from .memory_cache import ByteCache
 
 
 SPOTIFY_SCOPES = "user-read-currently-playing user-read-playback-state"
@@ -44,8 +46,13 @@ class WindowsMediaSpotifyClient:
 
         self._manager_class = GlobalSystemMediaTransportControlsSessionManager
         self._playback_status = GlobalSystemMediaTransportControlsSessionPlaybackStatus
-        self._cover_cache: dict[str, bytes] = {}
-        self._cover_retry_at: dict[str, float] = {}
+        self._cover_cache = ByteCache()
+        self._cover_retry_at: OrderedDict[str, float] = OrderedDict()
+        self._artwork_enabled = True
+
+    def set_artwork_enabled(self, enabled: bool) -> None:
+        # Caches are mutated only by the polling thread.
+        self._artwork_enabled = enabled
 
     def get_current_track(self) -> TrackInfo | None:
         try:
@@ -94,13 +101,20 @@ class WindowsMediaSpotifyClient:
             title=title,
             duration_ms=duration_ms,
         )
-        cover_data = self._cover_cache.get(track_id)
-        if cover_data is None and time.monotonic() >= self._cover_retry_at.get(track_id, 0.0):
+        if not self._artwork_enabled:
+            self._cover_cache.clear()
+            self._cover_retry_at.clear()
+        cover_data = self._cover_cache.get(track_id) if self._artwork_enabled else None
+        if self._artwork_enabled and cover_data is None and time.monotonic() >= self._cover_retry_at.get(track_id, 0.0):
             cover_data = await self._read_thumbnail_bytes(getattr(media, "thumbnail", None))
             if cover_data:
                 self._cover_cache[track_id] = cover_data
+                self._cover_retry_at.pop(track_id, None)
             else:
                 self._cover_retry_at[track_id] = time.monotonic() + 5.0
+                self._cover_retry_at.move_to_end(track_id)
+                while len(self._cover_retry_at) > 8:
+                    self._cover_retry_at.popitem(last=False)
 
         return TrackInfo(
             track_id=track_id,
@@ -118,29 +132,32 @@ class WindowsMediaSpotifyClient:
     async def _read_thumbnail_bytes(thumbnail) -> bytes | None:
         if thumbnail is None:
             return None
+        stream = reader = input_stream = None
         try:
             from winsdk.windows.storage.streams import DataReader
 
             stream = await asyncio.wait_for(thumbnail.open_read_async(), timeout=2.0)
             size = int(stream.size)
             if size <= 0 or size > MAX_WINDOWS_COVER_BYTES:
-                stream.close()
                 return None
             input_stream = stream.get_input_stream_at(0)
             reader = DataReader(input_stream)
             loaded = await asyncio.wait_for(reader.load_async(size), timeout=2.0)
             if loaded <= 0:
-                reader.close()
-                stream.close()
                 return None
             output = bytearray(loaded)
             reader.read_bytes(output)
             data = bytes(output)
-            reader.close()
-            stream.close()
             return data or None
         except (AttributeError, OSError, RuntimeError, ValueError, TimeoutError, asyncio.TimeoutError):
             return None
+        finally:
+            for resource in (reader, input_stream, stream):
+                if resource is not None:
+                    try:
+                        resource.close()
+                    except (OSError, RuntimeError):
+                        pass
 
     def _pick_spotify_session(self, current_session, sessions):
         if current_session is not None and self._is_spotify_session(current_session):

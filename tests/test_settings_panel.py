@@ -16,6 +16,7 @@ def overlay():
     app = create_application()
     window = OverlayWindow()
     window.load_config_values(default_config())
+    window.ensure_settings()
     window.show()
     yield window
     window.allow_exit()

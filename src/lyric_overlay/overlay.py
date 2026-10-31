@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 from .animated_lyric import AnimatedLyricLabel, LyricTransitionLayer
 from .font_combobox import CompactFontComboBox
 
-from PySide6.QtCore import QObject, QEvent, QEasingCurve, QPoint, QRect, QRectF, QPropertyAnimation, QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QShortcut
+from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QObject, QEvent, QEasingCurve, QPoint, QRect, QRectF, QSize, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImageReader, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -366,6 +366,17 @@ class OverlayWindow(QWidget):
         settings_layout.setContentsMargins(0, 4, 0, 0)
         settings_layout.setSpacing(10)
 
+        self._settings_built = False
+        self.settings_feedback = QLabel("", self.settings_panel)
+        self.playback_status = QLabel("Waiting for playback", self.settings_panel)
+        self.settings_panel.hide()
+        self._build_compact_content(card_layout)
+
+    def ensure_settings(self) -> None:
+        """Build the reusable form on first use, not on Classic startup."""
+        if self._settings_built:
+            return
+        self._settings_built = True
         self.client_id_input = self._create_input("Enter Spotify Client ID")
         self.client_secret_input = self._create_input("Enter Spotify Client Secret")
         self.client_secret_input.setEchoMode(QLineEdit.EchoMode.Password)
@@ -472,6 +483,16 @@ class OverlayWindow(QWidget):
         self.settings_panel.setMaximumHeight(0)
         self.settings_panel.hide()
 
+        self.display_preset_input.currentIndexChanged.connect(self._apply_selected_display_preset)
+        self.display_style_input.currentIndexChanged.connect(self._sync_custom_display_preset)
+        self.lyric_lines_input.currentIndexChanged.connect(self._sync_custom_display_preset)
+        self.track_info_mode_input.currentIndexChanged.connect(self._sync_custom_display_preset)
+        self.hover_buttons_checkbox.toggled.connect(self._preview_card_hover_controls)
+        self.track_info_gap_input.valueChanged.connect(self._preview_track_info_gap)
+        self.overlay_corner_radius_input.valueChanged.connect(self._preview_overlay_corner_radius)
+        self.load_config_values(self._saved_config)
+
+    def _build_compact_content(self, card_layout) -> None:
         self.album_cover_label = QLabel("")
         self.album_cover_label.setFixedSize(self._ALBUM_COVER_SIZE, self._ALBUM_COVER_SIZE)
         self.album_cover_label.hide()
@@ -502,15 +523,6 @@ class OverlayWindow(QWidget):
         self._lyric_glow.setOffset(0, 0)
         self.compact_label.setGraphicsEffect(self._lyric_glow)
 
-        self.display_preset_input.currentIndexChanged.connect(self._apply_selected_display_preset)
-        self.display_style_input.currentIndexChanged.connect(self._sync_custom_display_preset)
-        self.lyric_lines_input.currentIndexChanged.connect(self._sync_custom_display_preset)
-        self.track_info_mode_input.currentIndexChanged.connect(self._sync_custom_display_preset)
-        self.hover_buttons_checkbox.toggled.connect(self._preview_card_hover_controls)
-        self.track_info_gap_input.valueChanged.connect(self._preview_track_info_gap)
-        self.overlay_corner_radius_input.valueChanged.connect(self._preview_overlay_corner_radius)
-
-        self._sync_playback_source_ui()
         self._apply_theme()
         self._refresh_compact_text()
 
@@ -721,6 +733,15 @@ class OverlayWindow(QWidget):
         from .cinematic.preferences import normalize_options
         self._saved_config.cinematic_options = normalize_options(config.cinematic_options)
         self._playback_source = config.playback_source or WINDOWS_PLAYBACK_SOURCE
+        if not self._settings_built:
+            self._show_settings_button = config.show_settings_button
+            self._show_hide_button = config.show_hide_button
+            self._hover_buttons_enabled = config.hover_buttons_enabled
+            self.apply_config_theme(config)
+            self._sync_overlay_buttons_ui()
+            self._apply_window_mode()
+            self._loading_settings = False
+            return
         self.client_id_input.setText(config.spotify_client_id)
         self.client_secret_input.setText(config.spotify_client_secret)
         self.redirect_uri_input.setText(config.spotify_redirect_uri)
@@ -789,6 +810,8 @@ class OverlayWindow(QWidget):
         self.settings_edited()
 
     def current_form_config(self) -> AppConfig:
+        if not self._settings_built:
+            return deepcopy(self._saved_config)
         try:
             lyric_offset_ms = int(self.lyric_offset_input.text().strip() or "0")
         except ValueError:
@@ -871,10 +894,14 @@ class OverlayWindow(QWidget):
         if values is None:
             return
         self._display_style, self._lyric_lines, self._track_info_mode = values
-        self._set_combo_data(self.display_style_input, self._display_style)
-        self._set_combo_data(self.lyric_lines_input, self._lyric_lines)
-        self._set_combo_data(self.track_info_mode_input, self._track_info_mode)
-        self._set_combo_data(self.display_preset_input, preset)
+        if self._settings_built:
+            self._set_combo_data(self.display_style_input, self._display_style)
+            self._set_combo_data(self.lyric_lines_input, self._lyric_lines)
+            self._set_combo_data(self.track_info_mode_input, self._track_info_mode)
+            self._set_combo_data(self.display_preset_input, preset)
+        else:
+            self._saved_config = replace(self._saved_config, display_style=values[0],
+                                         lyric_lines=values[1], track_info_mode=values[2])
         self._sync_overlay_buttons_ui()
         self._sync_album_cover_ui()
         self._refresh_compact_text()
@@ -883,11 +910,21 @@ class OverlayWindow(QWidget):
         self.update()
 
     def set_album_cover(self, data: bytes | None) -> None:
-        pixmap = QPixmap()
-        if data and pixmap.loadFromData(data):
-            self._album_cover_source = pixmap
-        else:
-            self._album_cover_source = None
+        self._album_cover_source = None
+        if data:
+            buffer = QBuffer()
+            buffer.setData(QByteArray(data))
+            buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+            reader = QImageReader(buffer)
+            reader.setAutoTransform(True)
+            size = reader.size()
+            target = max(self._ALBUM_COVER_SIZE, round(self._ALBUM_COVER_SIZE * self.devicePixelRatioF()))
+            if size.isValid() and max(size.width(), size.height()) > target:
+                reader.setScaledSize(size.scaled(QSize(target, target), Qt.AspectRatioMode.KeepAspectRatio))
+            image = reader.read()
+            if not image.isNull():
+                self._album_cover_source = QPixmap.fromImage(image)
+            buffer.close()
         self._sync_album_cover_ui()
 
     def _sync_album_cover_ui(self) -> None:
@@ -962,7 +999,8 @@ class OverlayWindow(QWidget):
         self._show_hide_button = show_hide_button
         if hover_buttons_enabled is not None:
             self._hover_buttons_enabled = hover_buttons_enabled
-            self.hover_buttons_checkbox.setChecked(hover_buttons_enabled)
+            if self._settings_built:
+                self.hover_buttons_checkbox.setChecked(hover_buttons_enabled)
         self._sync_overlay_buttons_ui()
         self._refresh_layout_after_settings_change()
 
@@ -992,6 +1030,8 @@ class OverlayWindow(QWidget):
         self._set_settings_expanded(True)
 
     def _set_settings_expanded(self, expanded: bool) -> None:
+        if expanded:
+            self.ensure_settings()
         start = QRect(self.geometry())
         self._dock_animation.stop()
         self._resize_animation.stop()
@@ -1307,16 +1347,17 @@ class OverlayWindow(QWidget):
         QTimer.singleShot(0, self.reconnect_requested.emit)
 
     def toggle_lyric_color_shortcut(self) -> None:
-        current_color = (self.lyric_color_input.text().strip() or self._lyric_text_color).upper()
-        toggle_color = (self.toggle_color_input.text().strip() or self._lyric_toggle_color).upper()
+        current_color = (self.lyric_color_input.text().strip() if self._settings_built else self._lyric_text_color).upper()
+        toggle_color = (self.toggle_color_input.text().strip() if self._settings_built else self._lyric_toggle_color).upper()
         if self._same_color(current_color, toggle_color):
             next_color = self._last_non_toggle_lyric_color or self._DEFAULT_LYRIC_COLOR
         else:
             self._last_non_toggle_lyric_color = current_color
             next_color = toggle_color
 
-        self.lyric_color_input.setText(next_color)
-        updated_config = self.current_form_config()
+        if self._settings_built:
+            self.lyric_color_input.setText(next_color)
+        updated_config = replace(self.current_form_config(), lyric_text_color=next_color)
         self.apply_config_theme(updated_config)
         if self._expanded:
             return
@@ -1636,6 +1677,8 @@ class OverlayWindow(QWidget):
         return Qt.AlignmentFlag.AlignLeft
 
     def _sync_playback_source_ui(self) -> None:
+        if not self._settings_built:
+            return
         show_oauth_fields = self._playback_source == SPOTIFY_API_PLAYBACK_SOURCE
         self.credentials_section.setVisible(show_oauth_fields)
         self.playback_buttons[self._playback_source].setChecked(True)

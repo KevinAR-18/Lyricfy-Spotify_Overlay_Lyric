@@ -7,7 +7,6 @@ from PySide6.QtGui import QKeySequence, QShortcut
 
 from ..config import save_config
 from .preferences import needs_artwork
-from .window import CinematicWindow
 
 
 class CinematicManager(QObject):
@@ -31,6 +30,8 @@ class CinematicManager(QObject):
 
     def ensure_window(self):
         if self.window is None:
+            from .window import CinematicWindow
+
             self.window = CinematicWindow(self.controller.config.cinematic_options)
             self.window.bridge.settingsRequested.connect(self.open_settings)
             self.window.bridge.classicRequested.connect(lambda: self.set_enabled(False))
@@ -46,12 +47,12 @@ class CinematicManager(QObject):
         if self._frame is None or self._frame["track"] != frame["track"]:
             self._artwork = None
         self._frame = frame
-        if self.window is not None:
+        if self.window is not None and (self.enabled or self.window.isVisible()):
             self.window.bridge.set_frame(frame)
 
     def set_artwork(self, data):
         self._artwork = data
-        if self.window is not None:
+        if self.window is not None and (self.enabled or self.window.isVisible()):
             self.window.bridge.set_artwork(data)
 
     def set_enabled(self, enabled):
@@ -88,13 +89,19 @@ class CinematicManager(QObject):
 
     def show(self):
         if self.enabled:
-            self.ensure_window().show_from_tray()
+            window = self.ensure_window()
+            if self._frame is not None:
+                window.bridge.set_frame(self._frame)
+            window.bridge.set_artwork(self._artwork)
+            window.show_from_tray()
             if not self.overlay._expanded:
                 self.overlay.hide_to_tray()
         else:
             self.overlay.show_from_tray()
             if self.window:
                 self.window.hide()
+                self.window.bridge.set_artwork(None)
+                self.window.releaseResources()
         self.controller.resume_polling()
 
     def hide(self):
@@ -103,6 +110,7 @@ class CinematicManager(QObject):
         self.overlay.hide_to_tray()
         if self.window:
             self.window.hide()
+            self.window.releaseResources()
         self.controller.pause_polling()
 
     def pause_if_hidden(self):
@@ -125,6 +133,8 @@ class CinematicManager(QObject):
 
     def finish_embedded_settings(self):
         self.controller.cinematic_cover_preview = False
+        if not self.controller._needs_cover():
+            self.controller.refresh_album_cover()
         if self.window:
             self.window.bridge.set_options(self.controller.config.cinematic_options)
         self.show()
@@ -134,7 +144,7 @@ class CinematicManager(QObject):
         needs_cover = needs_artwork(options)
         changed = needs_cover != self.controller.cinematic_cover_preview
         self.controller.cinematic_cover_preview = needs_cover
-        if changed and needs_cover and not self._artwork:
+        if changed:
             self.controller.refresh_album_cover()
 
     def shutdown(self):

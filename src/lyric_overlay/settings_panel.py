@@ -155,7 +155,7 @@ def build_settings_panel(overlay):
     dashboard.setOpenExternalLinks(True)
     credentials.addRow(dashboard)
     playback.addWidget(o.credentials_section)
-    o.playback_status = note(playback, "Waiting for playback")
+    playback.addWidget(o.playback_status)
     playback.addWidget(o.reconnect_button)
     form = section(playback, "Advanced")
     o.poll_interval_input = QSpinBox()
@@ -219,7 +219,6 @@ def build_settings_panel(overlay):
         o._install_popup_topmost_guard(combo)
 
     footer = QHBoxLayout()
-    o.settings_feedback = QLabel("")
     o.settings_feedback.setWordWrap(True)
     o.settings_feedback.setMinimumWidth(0)
     footer.addWidget(o.settings_feedback, 1)

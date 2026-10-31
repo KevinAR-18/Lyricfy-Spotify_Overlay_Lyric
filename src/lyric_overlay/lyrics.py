@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import threading
+from collections import OrderedDict
 from pathlib import Path
 
 import requests
@@ -62,17 +64,27 @@ def parse_lrc(text: str, source: str) -> LyricsData:
 
 
 class LyricsRepository:
-    def __init__(self, lrclib_enabled: bool = True, auto_save_fetched_lrc: bool = True) -> None:
+    def __init__(self, lrclib_enabled: bool = True, auto_save_fetched_lrc: bool = True, max_entries: int = 64) -> None:
         self.lrclib_enabled = lrclib_enabled
         self.auto_save_fetched_lrc = auto_save_fetched_lrc
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "lyric-overlay-starter/1.0"})
-        self._cache: dict[tuple[str, str, int], LyricsData] = {}
+        self.max_entries = max(1, max_entries)
+        self._cache: OrderedDict[tuple[str, str, int], LyricsData] = OrderedDict()
+        self._lock = threading.Lock()
 
     def get_lyrics(self, artist: str, title: str, duration_ms: int) -> LyricsData:
+        with self._lock:
+            result = self._get_lyrics(artist, title, duration_ms)
+            while len(self._cache) > self.max_entries:
+                self._cache.popitem(last=False)
+            return result
+
+    def _get_lyrics(self, artist: str, title: str, duration_ms: int) -> LyricsData:
         cache_key = self._cache_key(artist=artist, title=title, duration_ms=duration_ms)
         cached = self._cache.get(cache_key)
         if cached is not None:
+            self._cache.move_to_end(cache_key)
             return cached
 
         local = self._load_local_lrc(artist=artist, title=title)
@@ -87,6 +99,11 @@ class LyricsRepository:
                 return remote
 
         return LyricsData(source="none", lines=[])
+
+    def close(self) -> None:
+        with self._lock:
+            self._cache.clear()
+            self._session.close()
 
     def _cache_key(self, artist: str, title: str, duration_ms: int) -> tuple[str, str, int]:
         normalized_artist = " ".join(artist.casefold().split())

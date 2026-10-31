@@ -60,6 +60,7 @@ class CinematicWindow(QQuickView):
 
     def hide_to_tray(self):
         self.hide()
+        self.releaseResources()
         self.hidden.emit()
 
     def closeEvent(self, event):

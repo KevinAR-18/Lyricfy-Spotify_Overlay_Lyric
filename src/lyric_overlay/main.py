@@ -243,7 +243,7 @@ def main() -> int:
     overlay.clear_lyrics_cache_requested.connect(clear_cache)
     overlay.overlay_hidden.connect(cinematic.pause_if_hidden)
     overlay.overlay_shown.connect(controller.resume_polling)
-    app.aboutToQuit.connect(controller.stop)
+    app.aboutToQuit.connect(controller.shutdown)
     app.aboutToQuit.connect(cinematic.shutdown)
     overlay.set_track(None)
     overlay.set_lines("Starting Lyricfy…", "Connecting to Spotify playback")
