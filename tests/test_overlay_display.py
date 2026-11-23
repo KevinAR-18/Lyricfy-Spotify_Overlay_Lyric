@@ -1,13 +1,16 @@
 from dataclasses import replace
 
+import pytest
+
 from lyric_overlay.config import (
     CARD_DEFAULT_PRESET,
     FLOATING_CONTEXT_PRESET,
     FLOATING_MINIMAL_PRESET,
     default_config,
 )
+from lyric_overlay.models import TrackInfo
 from lyric_overlay.overlay import OverlayWindow, create_application
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
+from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QRect, Qt
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QWidget
 
@@ -29,8 +32,128 @@ def _image_bytes():
     return bytes(data)
 
 
+def _track(*, is_playing):
+    return TrackInfo("track", "Blue Hour", "The Midnight Atlas", "Album", 180_000, 30_000, is_playing)
+
+
+@pytest.mark.parametrize("manual", [False, True], ids=["auto", "manual"])
+def test_taskbar_pause_adds_row_above_wrapped_lyric_without_moving_it(monkeypatch, manual):
+    overlay = _overlay()
+    screen = overlay.screen().geometry()
+    area = QRect(screen.x() + 8, screen.bottom() - 47, 260, 48)
+    monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: area)
+    overlay.load_config_values(replace(default_config(), placement="taskbar_left", show_album_cover=True,
+                                       taskbar_manual=manual, taskbar_width=255))
+    overlay.set_album_cover(_image_bytes())
+    track = _track(is_playing=True)
+    line = "Acres of open stars, headlights of precious cars, life imitating art"
+    overlay.set_track(track, lyrics_source="local")
+    overlay.set_lines(line, "", transition_ms=0)
+    overlay.show()
+    create_application().processEvents()
+    # Disable geometry animation in this layout test to check the settled rectangles.
+    overlay._dock_animation.setDuration(0)
+    playing = overlay.geometry()
+    playing_lyric = overlay.compact_label.mapToGlobal(overlay.compact_label.rect().topLeft())
+    playing_width = overlay.compact_label.width()
+    assert overlay.compact_label.wordWrap()
+    assert overlay.compact_label.height() > overlay.compact_label.fontMetrics().lineSpacing()
+    assert overlay._pause_badge.isHidden()
+
+    overlay.set_track(replace(track, is_playing=False), lyrics_source="local")
+    overlay.set_paused()
+    create_application().processEvents()
+    badge = overlay._pause_badge
+    assert badge.isVisible() and badge.text() == "⏸ Paused"
+    assert overlay.geometry().bottomLeft() == playing.bottomLeft()
+    assert overlay.width() == playing.width()
+    assert overlay.height() > playing.height()
+    assert overlay.compact_label.width() == playing_width
+    assert overlay.compact_label.mapToGlobal(overlay.compact_label.rect().topLeft()) == playing_lyric
+    assert badge.mapToGlobal(badge.rect().topLeft()).x() == playing_lyric.x()
+    assert badge.mapToGlobal(badge.rect().bottomLeft()).y() < playing_lyric.y()
+    assert overlay.album_cover_label.mapToGlobal(overlay.album_cover_label.rect().bottomLeft()) == playing.bottomLeft()
+    assert overlay.compact_label.text() == line
+
+    overlay.set_track(track, lyrics_source="local")
+    overlay.show_status("")
+    create_application().processEvents()
+    assert badge.isHidden() and overlay.geometry() == playing
+    overlay.allow_exit()
+    overlay.close()
+
+
+def test_taskbar_pause_is_independent_of_lyrics_and_ends_with_track(monkeypatch):
+    monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: None)
+    overlay = _overlay()
+    overlay.load_config_values(replace(default_config(), placement="taskbar_left"))
+    paused = _track(is_playing=False)
+    overlay.set_track(paused, lyrics_source="loading")
+    overlay.show_status("Fetching lyrics...")
+    assert not overlay._pause_badge.isHidden()
+    assert overlay.album_cover_label.isHidden()
+    assert overlay.compact_label.text() == "Blue Hour — The Midnight Atlas"
+
+    overlay.set_track(paused, lyrics_source="local")
+    overlay.show_status("")
+    overlay.set_lines("Lirik yang baru dimuat", "", transition_ms=0)
+    assert not overlay._pause_badge.isHidden()
+    assert overlay.compact_label.text() == "Lirik yang baru dimuat"
+    assert overlay.status_label.isHidden()
+
+    overlay.set_track(None)
+    overlay.show_status("Playback paused")  # A generic status isn't playback state.
+    assert overlay._pause_badge.isHidden()
+    overlay.close()
+
+
+def test_taskbar_pause_uses_icon_in_minimum_width_with_cover():
+    overlay = _overlay()
+    overlay.load_config_values(replace(default_config(), placement="taskbar_left", taskbar_manual=True,
+                                       taskbar_width=96, show_album_cover=True))
+    overlay.set_album_cover(_image_bytes())
+    overlay.set_track(_track(is_playing=True), lyrics_source="local")
+    overlay.set_lines("Lyric", "", transition_ms=0)
+    overlay.show()
+    create_application().processEvents()
+    overlay._dock_animation.setDuration(0)
+    anchor = overlay.geometry().bottomLeft()
+    lyric_width = overlay.compact_label.width()
+    overlay.set_track(_track(is_playing=False), lyrics_source="local")
+    create_application().processEvents()
+    badge = overlay._pause_badge
+    assert badge.isVisible() and badge.text() == "⏸"
+    assert overlay.width() == 96 and overlay.geometry().bottomLeft() == anchor
+    assert badge.width() <= lyric_width == overlay.compact_label.width()
+    assert badge.contentsRect().width() >= badge.fontMetrics().horizontalAdvance(badge.text())
+    overlay.allow_exit()
+    overlay.close()
+
+
+def test_taskbar_pause_badge_is_hidden_in_settings_and_other_placements():
+    overlay = _overlay()
+    taskbar = replace(default_config(), placement="taskbar_left", taskbar_manual=True)
+    overlay.load_config_values(taskbar)
+    overlay.set_track(_track(is_playing=False), lyrics_source="local")
+    assert not overlay._pause_badge.isHidden()
+
+    overlay.toggle_settings()
+    assert overlay._pause_badge.isHidden()
+    overlay._resize_animation.stop()
+    overlay._finish_panel_animation()
+    overlay.close_settings_panel()
+    overlay._resize_animation.stop()
+    overlay._finish_panel_animation()
+    assert not overlay._pause_badge.isHidden()
+
+    for placement in ("top", "free"):
+        overlay.load_config_values(replace(taskbar, placement=placement))
+        overlay.set_paused()
+        assert overlay._pause_badge.isHidden()
+    overlay.close()
+
+
 def test_taskbar_dock_uses_native_area_and_updates_long_lyrics(monkeypatch):
-    from PySide6.QtCore import QRect
     monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: QRect(8, 1000, 260, 48))
     overlay = _overlay()
     overlay.load_config_values(replace(default_config(), placement="taskbar_left"))
@@ -83,7 +206,6 @@ def test_taskbar_detection_failure_uses_visible_manual_bounds(monkeypatch):
 
 
 def test_taskbar_auto_uses_all_space_even_with_small_manual_width(monkeypatch):
-    from PySide6.QtCore import QRect
     monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: QRect(8, 1000, 820, 48))
     overlay = _overlay()
     overlay.load_config_values(replace(default_config(), placement="taskbar_left", taskbar_width=280))
@@ -92,7 +214,6 @@ def test_taskbar_auto_uses_all_space_even_with_small_manual_width(monkeypatch):
 
 
 def test_taskbar_auto_keeps_last_valid_area_during_detection_failures(monkeypatch):
-    from PySide6.QtCore import QRect
     detected = [QRect(8, 1000, 820, 48)]
     monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: detected[0])
     overlay = _overlay()
@@ -115,7 +236,6 @@ def test_taskbar_auto_fallback_ignores_old_narrow_manual_width(monkeypatch):
 
 
 def test_settings_from_taskbar_resets_preview_layout_before_animation(monkeypatch):
-    from PySide6.QtCore import QRect
     monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: QRect(8, 1000, 300, 48))
     overlay = _overlay()
     overlay.load_config_values(replace(default_config(), placement="taskbar_left"))
@@ -131,7 +251,6 @@ def test_settings_from_taskbar_resets_preview_layout_before_animation(monkeypatc
 
 
 def test_taskbar_cold_show_places_cover_without_click(monkeypatch):
-    from PySide6.QtCore import QRect
     from PySide6.QtWidgets import QApplication
     from PySide6.QtTest import QTest
     monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: QRect(8, 1000, 820, 48))
@@ -150,7 +269,6 @@ def test_taskbar_cold_show_places_cover_without_click(monkeypatch):
 
 
 def test_taskbar_cover_stays_visible_and_bottom_aligned_with_active_lyrics(monkeypatch):
-    from PySide6.QtCore import QRect
     monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: QRect(8, 1000, 260, 48))
     overlay = _overlay()
     overlay.load_config_values(replace(default_config(), placement="taskbar_left", show_album_cover=True,

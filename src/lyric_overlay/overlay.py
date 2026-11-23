@@ -212,6 +212,8 @@ class OverlayWindow(QWidget):
     _COMPACT_MIN_HEIGHT = 60
     _COMPACT_WINDOW_WIDTH = 620
     _ALBUM_COVER_SIZE = 48
+    _PAUSE_BADGE_TEXT = "⏸ Paused"
+    _PAUSE_BADGE_GAP = 2
     _DRAG_START_DISTANCE = 3
     _MIN_VISIBLE_DRAG_WIDTH = 40
 
@@ -238,6 +240,7 @@ class OverlayWindow(QWidget):
         self._current_line_text = ""
         self._next_line_text = ""
         self._status_text = ""
+        self._playback_paused = False
         self._lyrics_available = False
         self._header_visible_until = 0.0
         self._no_lyrics_notice_until = 0.0
@@ -500,6 +503,18 @@ class OverlayWindow(QWidget):
         self._compact_text_layout = QVBoxLayout(self._compact_text_widget)
         self._compact_text_layout.setContentsMargins(0, 0, 0, 0)
         self._compact_text_layout.setSpacing(0)
+        self._pause_badge = QLabel(self._PAUSE_BADGE_TEXT)
+        self._pause_badge.setIndent(0)
+        self._pause_badge.setFont(QFont("Segoe UI Semibold", 9))
+        self._pause_badge.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self._pause_badge.setObjectName("taskbarPauseBadge")
+        self._pause_badge.setAccessibleName("Playback paused")
+        self._pause_badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._pause_badge.hide()
+        self._pause_badge_row = QVBoxLayout()
+        self._pause_badge_row.setContentsMargins(0, 0, 0, 0)
+        self._pause_badge_row.addWidget(self._pause_badge, 0, Qt.AlignmentFlag.AlignLeft)
+        self._compact_text_layout.addLayout(self._pause_badge_row)
         self._compact_text_layout.addLayout(self._header_layout)
         self.next_line_label = AnimatedLyricLabel("")
         self.next_line_label.setObjectName("nextLyric")
@@ -573,6 +588,13 @@ class OverlayWindow(QWidget):
             }}
             QLabel#nextLyric {{
                 color: {next_lyric_color.name(QColor.NameFormat.HexArgb)};
+            }}
+            QLabel#taskbarPauseBadge {{
+                color: #E5E3E7;
+                background: #29262A;
+                border: 1px solid #59525A;
+                border-radius: 4px;
+                padding: 0 2px;
             }}
             QLabel#sectionTitle {{
                 color: {self._overlay_text_color};
@@ -1037,6 +1059,8 @@ class OverlayWindow(QWidget):
         self._resize_animation.stop()
         self._panel_animating = True
         self._expanded = expanded
+        self._pause_badge.hide()
+        self._pause_badge_row.setContentsMargins(0, 0, 0, 0)
         self.setWindowOpacity(1.0)
         if expanded:
             self.findChild(QWidget, "card").layout().setContentsMargins(16, 12, 16, 12)
@@ -1370,6 +1394,9 @@ class OverlayWindow(QWidget):
 
     def set_track(self, track: TrackInfo | None, lyrics_source: str = "") -> None:
         self.playback_status.setText("Connected — playing" if track and track.is_playing else "Connected — paused" if track else "Waiting for Spotify playback")
+        paused = track is not None and not track.is_playing
+        refresh_pause_badge = self._placement == "taskbar_left" and self._playback_paused != paused
+        self._playback_paused = paused
         previous_compact_text = self.compact_label.text()
         previous_header_visible = self.track_title_label.isVisible()
         previous_header_text = self.track_title_label.text()
@@ -1391,6 +1418,7 @@ class OverlayWindow(QWidget):
                 previous_compact_text,
                 previous_header_text,
                 previous_header_visible,
+                force=refresh_pause_badge,
             )
             return
 
@@ -1422,6 +1450,7 @@ class OverlayWindow(QWidget):
             previous_compact_text,
             previous_header_text,
             previous_header_visible,
+            force=refresh_pause_badge,
         )
 
     def set_lines(self, current_line: str, next_line: str, *, transition_ms: int | None = None) -> None:
@@ -1715,11 +1744,13 @@ class OverlayWindow(QWidget):
         previous_compact_text: str,
         previous_header_text: str,
         previous_header_visible: bool,
+        *,
+        force: bool = False,
     ) -> None:
         if self._expanded:
             return
         if (
-            self.compact_label.text() != previous_compact_text
+            force or self.compact_label.text() != previous_compact_text
             or self.track_title_label.text() != previous_header_text
             or self.track_title_label.isVisible() != previous_header_visible
         ):
@@ -1796,6 +1827,8 @@ class OverlayWindow(QWidget):
         if self._placement != "free" and not self._expanded:
             self._apply_dock_geometry()
             return
+        self._pause_badge.hide()
+        self._pause_badge_row.setContentsMargins(0, 0, 0, 0)
         self.setWindowOpacity(1.0)
         self._dock_animation.stop()
         self.compact_label.setMinimumWidth(500)
@@ -1884,14 +1917,28 @@ class OverlayWindow(QWidget):
         width = area.width() if area is not None else min(480, max(1, screen.availableGeometry().width() - 16))
         wrap = bool(self._lyrics_available and self._current_line_text)
         self.compact_label.setWordWrap(wrap)
-        self.compact_label.setMinimumWidth(0)
+        # A positive explicit minimum overrides Qt's longest-word minimum in narrow taskbars.
+        self.compact_label.setMinimumWidth(1 if taskbar else 0)
         self.compact_label.setMinimumHeight(0)
         text_width = max(1, width - left_padding - right_padding - cover_width)
         metrics = QFontMetrics(self.compact_label.font())
         text_height = metrics.boundingRect(QRect(0, 0, text_width, 100000), Qt.TextFlag.TextWordWrap, " ".join(content.split())).height() if wrap else metrics.lineSpacing()
         vertical_padding = top_padding + bottom_padding
-        height = min(screen.geometry().height(), max(base_height, text_height + vertical_padding, cover_size + vertical_padding if cover_width else 0))
-        self.compact_label.setMaximumHeight(max(1, height - vertical_padding))
+        show_pause = taskbar and self._playback_paused
+        pause_height = 0
+        if show_pause:
+            self._pause_badge.ensurePolished()
+            margins = self._pause_badge.contentsMargins()
+            full_width = self._pause_badge.fontMetrics().horizontalAdvance(self._PAUSE_BADGE_TEXT) + margins.left() + margins.right()
+            self._pause_badge.setText(self._PAUSE_BADGE_TEXT if full_width <= text_width else "⏸")
+            self._pause_badge.setMaximumWidth(min(text_width, self._pause_badge.sizeHint().width()))
+            pause_height = self._pause_badge.sizeHint().height() + self._PAUSE_BADGE_GAP
+        self._pause_badge_row.setContentsMargins(0, 0, 0, self._PAUSE_BADGE_GAP if show_pause else 0)
+        self._pause_badge.setVisible(show_pause)
+        content_height = max(base_height, text_height + vertical_padding, cover_size + vertical_padding if cover_width else 0)
+        # Grow by the badge height so the underlying text stays anchored in the same place.
+        height = min(screen.geometry().height(), content_height + pause_height)
+        self.compact_label.setMaximumHeight(max(1, height - vertical_padding - pause_height))
         self._refresh_compact_text(compact_width=text_width)
         self.setMinimumSize(0, 0)
         target = (QRect(area.x(), max(screen.geometry().top(), area.bottom() - height + 1), width, height)
