@@ -25,10 +25,11 @@ release-*.txt
 release_notes_*.txt
 release_notes*.txt
 
-# Keep the v1.6.1 changelog in source control; installers stay ignored.
+# Track versioned release notes, but not generated installers.
 !releases/
 releases/*
 !releases/release-v1.6.1.txt
+!releases/release-v1.6.2.txt
 
 # Local recording tools and intermediate captures; published previews stay tracked.
 /tools/recording/

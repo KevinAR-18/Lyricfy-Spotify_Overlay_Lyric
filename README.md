@@ -1,8 +1,8 @@
 # Lyricfy
 
-**Latest release: v1.6.1** — see the [release notes](releases/release-v1.6.1.txt) for lower Classic startup memory, bounded caches, and more efficient artwork handling.
+**Latest release: v1.6.2** — [release notes](releases/release-v1.6.2.txt). Classic Taskbar Left now shows a compact `⏸ Paused` badge above the lyric when playback is paused.
 
-### Memory efficiency in v1.6.1
+### [Memory efficiency in v1.6.1](releases/release-v1.6.1.txt)
 
 Classic defers Settings and Qt Quick/QML initialization until needed. Artwork caches are limited to 8 entries / 8 MiB each, and the in-memory lyrics cache retains up to 64 songs; local `.lrc` files are unaffected. Settings is reused after its first opening, and native Cinematic libraries may remain loaded after switching back to Classic.
 
@@ -75,6 +75,7 @@ or an MCP server. Use `Ctrl+C` in the server terminal to stop it.
 - Independent solid Settings palettes: Midnight (default), Graphite, Warm Dark, and Light; lyric overlay colors and transparency remain unchanged
 - Placement options: Free Floating, Top Dock, and Taskbar Left (over the taskbar before Start), with a selectable monitor. Taskbar lyrics wrap upward from a fixed bottom-left anchor. If Start detection fails, adjustable manual bounds keep the overlay visible; adjust the width and insets to avoid Windows controls.
 - Taskbar Left Auto fills the detected free area without a fixed width cap. Manual/fallback width defaults to 620 logical pixels; existing saved widths are preserved. Optional 48 × 48 px album artwork stays visible at the bottom left, including during active lyrics. Windows UI Automation is queried in the background when native Start detection is unavailable.
+- In Classic Taskbar Left, a `⏸ Paused` badge appears above the last lyric or the title and artist when playback is paused. It disappears on resume or when the playback session ends.
 - When lyrics are unavailable, track title and artist appear together on one line alongside optional album artwork
 - Three display presets: `Card Default`, `Floating Minimal`, and `Floating Context`
 - Optional smaller next lyric below the active lyric

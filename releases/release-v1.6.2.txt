@@ -1,0 +1,12 @@
+# Lyricfy v1.6.2 Release Notes
+
+## Taskbar Left
+
+- **Pause indicator:** Classic Taskbar Left shows a small `⏸ Paused` badge above the current lyric while a track is paused. If no lyric is available, the badge appears above the track title and artist instead. It disappears when playback resumes or the playback session ends.
+- **Stable layout:** The badge takes no horizontal space away from the lyric. The overlay grows upward, keeping the taskbar anchor and optional album cover at the bottom. In very narrow layouts, the badge can use just the pause icon.
+- **Reliable status:** The badge follows the playback state, so lyric loading and other temporary messages cannot clear it while the track is still paused.
+
+## Compatibility
+
+- Free Floating, Top Dock, and Cinematic keep their existing behavior.
+- No new settings or migration. Existing playback preferences, taskbar bounds, and local lyrics are preserved.
