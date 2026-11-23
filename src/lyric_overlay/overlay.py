@@ -1030,13 +1030,17 @@ class OverlayWindow(QWidget):
         if message and self._expanded:
             self.settings_feedback.setText(message)
         new_status = message.strip()
-        new_visible = bool(new_status) or self._expanded
         text_changed = new_status != self._status_text
-        visibility_changed = new_visible != self.status_label.isVisible()
-
         self._status_text = new_status
         if text_changed:
             self.status_label.setText(self._status_text)
+        if self._placement == "taskbar_left" and not self._expanded:
+            # Keep the general status row out of dock layout, even between polls.
+            self.status_label.hide()
+            return
+
+        new_visible = bool(new_status) or self._expanded
+        visibility_changed = new_visible != self.status_label.isVisible()
         if visibility_changed:
             self.status_label.setVisible(new_visible)
         self._refresh_compact_text()
@@ -1486,6 +1490,9 @@ class OverlayWindow(QWidget):
         self._lyric_transition.finish()
         self.compact_label.finish_transition()
         self.next_line_label.finish_transition()
+        if self._placement == "taskbar_left" and not self._expanded:
+            self.show_status("Playback paused")
+            return
         self._status_text = "Playback paused"
         self.status_label.setText(self._status_text)
         self.status_label.setVisible(True)

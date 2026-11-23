@@ -2,15 +2,17 @@ from dataclasses import replace
 
 import pytest
 
+from lyric_overlay.app_controller import AppController, PlaybackSnapshot
 from lyric_overlay.config import (
     CARD_DEFAULT_PRESET,
     FLOATING_CONTEXT_PRESET,
     FLOATING_MINIMAL_PRESET,
     default_config,
 )
-from lyric_overlay.models import TrackInfo
+from lyric_overlay.lyrics import LyricsRepository
+from lyric_overlay.models import LyricLine, LyricsData, TrackInfo
 from lyric_overlay.overlay import OverlayWindow, create_application
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QRect, Qt
+from PySide6.QtCore import QByteArray, QBuffer, QEvent, QIODevice, QObject, QRect, Qt
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QWidget
 
@@ -107,6 +109,55 @@ def test_taskbar_pause_is_independent_of_lyrics_and_ends_with_track(monkeypatch)
     overlay.close()
 
 
+@pytest.mark.parametrize("manual", [False, True], ids=["auto", "manual"])
+def test_taskbar_repeated_pause_polls_do_not_toggle_status_or_move_widgets(monkeypatch, manual):
+    app = create_application()
+    overlay = _overlay()
+    screen = overlay.screen().geometry()
+    area = QRect(screen.x() + 8, screen.bottom() - 47, 260, 48)
+    monkeypatch.setattr("lyric_overlay.platform.taskbar_windows.taskbar_left_area", lambda screen: area)
+    config = replace(default_config(), placement="taskbar_left", taskbar_manual=manual,
+                     taskbar_width=255, show_album_cover=True)
+    overlay.load_config_values(config)
+    overlay.set_album_cover(_image_bytes())
+    overlay._dock_animation.setDuration(0)
+    controller = AppController(None, LyricsRepository(lrclib_enabled=False), overlay, config)
+    track = _track(is_playing=False)
+    line = "Acres of open stars, headlights of precious cars, life imitating art"
+    lyrics = LyricsData("local", [LyricLine(0, line)])
+    controller.snapshot = PlaybackSnapshot(track, lyrics)
+    controller.sync_engine.set_lyrics(lyrics)
+    controller.refresh(track)
+    overlay.show()
+    app.processEvents()
+
+    events = []
+
+    class LayoutWatcher(QObject):
+        def eventFilter(self, watched, event):
+            if event.type() in (QEvent.Type.Show, QEvent.Type.Hide, QEvent.Type.Move, QEvent.Type.Resize):
+                events.append(event.type().name)
+            return False
+
+    watcher = LayoutWatcher()
+    for widget in (overlay.status_label, overlay._pause_badge, overlay.compact_label, overlay.album_cover_label):
+        widget.installEventFilter(watcher)
+    try:
+        for _ in range(3):
+            controller.refresh(replace(track))
+            app.processEvents()
+        overlay.show_status("Fetching lyrics...")
+        app.processEvents()
+        assert not events
+        assert overlay.status_label.isHidden()
+        assert overlay._pause_badge.isVisible()
+        assert overlay.compact_label.text() == line
+    finally:
+        controller.shutdown()
+        overlay.allow_exit()
+        overlay.close()
+
+
 def test_taskbar_pause_uses_icon_in_minimum_width_with_cover():
     overlay = _overlay()
     overlay.load_config_values(replace(default_config(), placement="taskbar_left", taskbar_manual=True,
@@ -135,10 +186,14 @@ def test_taskbar_pause_badge_is_hidden_in_settings_and_other_placements():
     taskbar = replace(default_config(), placement="taskbar_left", taskbar_manual=True)
     overlay.load_config_values(taskbar)
     overlay.set_track(_track(is_playing=False), lyrics_source="local")
+    overlay.set_paused()
     assert not overlay._pause_badge.isHidden()
+    assert overlay.status_label.isHidden()
 
     overlay.toggle_settings()
     assert overlay._pause_badge.isHidden()
+    assert not overlay.status_label.isHidden()
+    assert overlay.status_label.text() == "Playback paused"
     overlay._resize_animation.stop()
     overlay._finish_panel_animation()
     overlay.close_settings_panel()
