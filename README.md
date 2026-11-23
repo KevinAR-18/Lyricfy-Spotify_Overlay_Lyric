@@ -1,8 +1,8 @@
 # Lyricfy
 
-**Latest release: v1.6.2** — [release notes](releases/release-v1.6.2.txt). Classic Taskbar Left now shows a compact `⏸ Paused` badge above the lyric when playback is paused.
-
 Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and PySide6. It reads the current track from the local Windows media session by default, syncs lyrics using local `.lrc` files or LRCLIB, and shows them in a compact always-on-top overlay.
+
+[Latest release](https://github.com/KevinAR-18/Lyricfy-Spotify_Overlay_Lyric/releases/latest)
 
 ## Preview
 
