@@ -34,3 +34,6 @@ releases/*
 /tools/recording/
 /recordings/
 /assets/screenshots/raw/
+
+# Superpowers Visual Companion sessions (local HTML copies, URLs, and votes).
+/.superpowers/brainstorm/

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lyricfy v1.6.2 · Taskbar Left</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 'Segoe UI', system-ui, sans-serif; color: #f4f4f7; background: #131419; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1500px; margin: auto; padding: 28px clamp(16px, 4vw, 48px) 36px; }
+    h1, h2, p, figure, fieldset { margin: 0; }
+    header > p, .flow > p, article p, figcaption { color: #bcbecb; }
+    .eyebrow { font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #b4bfff; }
+    h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.2; margin: 4px 0 8px; }
+    h2 { font-size: 1.12rem; }
+    header, .flow, .reference { margin-bottom: 20px; }
+    .flow, article, .reference { background: #1c1e26; border: 1px solid #373a49; border-radius: 12px; padding: 16px; }
+    .flow { display: flex; flex-wrap: wrap; gap: 12px 20px; }
+    .flow > p { flex-basis: 100%; font-size: .83rem; }
+    fieldset { min-inline-size: 0; border: 0; padding: 0; }
+    legend { padding: 0; margin-bottom: 5px; font-size: .81rem; font-weight: 600; color: #c5c8d7; }
+    .segment { display: flex; flex-wrap: wrap; gap: 4px; }
+    .segment label { position: relative; display: grid; cursor: pointer; }
+    .segment input { position: absolute; opacity: 0; }
+    .segment span, .vote { padding: 5px 10px; border: 1px solid #4c5165; border-radius: 6px; background: #222532; font: 600 .84rem/1.45 'Segoe UI', system-ui, sans-serif; color: #e2e5f4; }
+    .segment input:checked + span, .vote[aria-pressed='true'] { color: #f2f3ff; background: #373e66; border-color: #aab7ff; }
+    .segment input:focus-visible + span, button:focus-visible, summary:focus-visible { outline: 2px solid #c5cdff; outline-offset: 2px; }
+    .variants { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 590px), 1fr)); gap: 14px; }
+    article { min-width: 0; display: grid; grid-template-rows: auto auto 1fr auto; gap: 10px; }
+    article[data-selected] { border-color: #aab7ff; }
+    .option-tag { margin-right: 6px; color: #b4bfff; }
+    article p { font-size: .88rem; }
+    .vote { justify-self: start; cursor: pointer; }
+    .vote:hover { border-color: #aab7ff; }
+    .result { margin: 10px 0 18px; color: #c3c9e7; font-size: .87rem; min-height: 1.5em; }
+    .reference summary { cursor: pointer; font-weight: 600; }
+    .reference img { display: block; max-width: 100%; height: auto; margin-top: 10px; border-radius: 4px; }
+    figcaption { font-size: .82rem; margin-top: 4px; }
+
+    /* Scale the usable taskbar area, not the on-screen lettering. */
+    .scene {
+      --taskbar-width: 684px;
+      display: flex; align-items: flex-end; min-width: 0; min-height: 152px; padding: 24px 0 5px 5px;
+      overflow: hidden; position: relative; isolation: isolate; border-radius: 7px;
+      background: radial-gradient(ellipse at 12% 4%, #393136, transparent 55%), linear-gradient(146deg, #20202a, #17151c 72%);
+    }
+    .scene[data-width='narrow'] { --taskbar-width: 360px; }
+    .scene::before { content: ''; position: absolute; inset: auto 0 0; height: 44px; z-index: -1; background: #252222; border-top: 1px solid #433e40; }
+    .overlay {
+      flex: 0 1 var(--taskbar-width); min-width: 0; display: flex; align-items: flex-end;
+      gap: 10px; padding-right: 16px; color: #f4f4f4;
+    }
+    .cover { flex: none; width: 48px; height: 48px; border-radius: 8px; background: url('/files/taskbar-left.png') -5px -33px / 684px 83px no-repeat; }
+    .copy { display: flex; flex: 1; min-width: 0; }
+    [data-variant='above'] .copy { flex-direction: column; align-items: flex-start; }
+    [data-variant='right'] .copy { align-items: center; gap: 12px; }
+    .paused {
+      display: inline-flex; flex: none; align-items: center; gap: 5px;
+      color: #e5e3e7; font-size: 13px; line-height: 17px; font-weight: 600;
+      background: #29262a; border: 1px solid #59525a; border-radius: 4px; padding: 0 6px;
+    }
+    .paused::before { content: ''; width: 3px; height: 9px; margin-right: 5px; border-radius: 1px; background: currentColor; box-shadow: 5px 0 currentColor; }
+    [data-variant='above'] .paused { margin-bottom: 2px; }
+    .lyric-box { display: flex; flex: 1; min-width: 0; width: 100%; max-width: 570px; min-height: 48px; align-items: center; padding: 0 0 2px; }
+    .lyric { width: 100%; font-size: 20px; line-height: 1.22; font-weight: 700; letter-spacing: .2px; overflow-wrap: anywhere; text-shadow: 0 1px 2px #000; }
+    .scene[data-content='metadata'] .lyric { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .start { display: grid; place-items: center; flex: 0 0 44px; height: 38px; margin-left: 1px; border-left: 1px solid #514b50; }
+    .start svg { width: 15px; fill: #83c1ff; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Lyricfy v1.6.2 · Review desain</div>
+      <h1>Taskbar Left saat lagu dijeda</h1>
+      <p>Bandingkan dua posisi label. Lirik tetap terlihat dan cover tetap di kiri bawah saat pause.</p>
+    </header>
+
+    <form class="flow" id="controls" aria-label="Kontrol simulasi">
+      <fieldset><legend>Playback</legend><div class="segment">
+        <label><input type="radio" name="playback" value="playing"><span>Playing</span></label>
+        <label><input type="radio" name="playback" value="paused" checked><span>Paused</span></label>
+      </div></fieldset>
+      <fieldset><legend>Lebar overlay</legend><div class="segment">
+        <label><input type="radio" name="width" value="normal" checked><span>Normal</span></label>
+        <label><input type="radio" name="width" value="narrow"><span>Sempit</span></label>
+      </div></fieldset>
+      <fieldset><legend>Cover album</legend><div class="segment">
+        <label><input type="radio" name="cover" value="on" checked><span>On</span></label>
+        <label><input type="radio" name="cover" value="off"><span>Off</span></label>
+      </div></fieldset>
+      <fieldset><legend>Isi overlay</legend><div class="segment">
+        <label><input type="radio" name="content" value="lyrics" checked><span>Lirik panjang</span></label>
+        <label><input type="radio" name="content" value="metadata"><span>Tanpa lirik</span></label>
+      </div></fieldset>
+      <p>Kontrol berlaku ke kedua opsi. Lebar normal menyesuaikan ruang browser, maksimal 684 px.</p>
+    </form>
+
+    <div class="variants" id="variants"></div>
+    <p class="result" id="result" role="status">Pilih satu untuk menandai preferensimu, lalu konfirmasi di chat.</p>
+
+    <details class="reference" open>
+      <summary>Pembanding · screenshot Taskbar Left saat ini</summary>
+      <figure>
+        <img src="/files/taskbar-left.png" width="684" height="83" alt="Screenshot Lyricfy dengan cover di kiri dan lirik dua baris di taskbar.">
+        <figcaption>Ini screenshot asli. Dua opsi di atas adalah simulasi browser, bukan render Qt.</figcaption>
+      </figure>
+    </details>
+  </main>
+
+  <template id="variant">
+    <article>
+      <h2><span class="option-tag"></span><span class="option-title"></span></h2>
+      <p></p>
+      <div class="scene">
+        <div class="overlay">
+          <div class="cover" aria-hidden="true"></div>
+          <div class="copy">
+            <span class="paused">Paused</span>
+            <div class="lyric-box"><div class="lyric" lang="en"></div></div>
+          </div>
+        </div>
+        <div class="start" aria-hidden="true">
+          <svg viewBox="0 0 16 16"><path d="M0 0h7.5v7.5H0zM8.5 0H16v7.5H8.5zM0 8.5h7.5V16H0zM8.5 8.5H16V16H8.5z"/></svg>
+        </div>
+      </div>
+      <button type="button" class="vote" aria-pressed="false"></button>
+    </article>
+  </template>
+
+  <script>
+    const variants = [
+      ['A', 'above', 'Di atas lirik', 'Memakai ruang ke atas, tanpa mengambil lebar lirik.'],
+      ['B', 'right', 'Di kanan lirik', 'Lebih hemat tinggi jika cukup lebar; lirik bisa lebih cepat membungkus.'],
+    ];
+    const form = document.querySelector('#controls');
+    const template = document.querySelector('#variant');
+    const container = document.querySelector('#variants');
+    const result = document.querySelector('#result');
+
+    for (const [code, layout, title, description] of variants) {
+      const card = template.content.cloneNode(true);
+      card.querySelector('article').dataset.variant = layout;
+      card.querySelector('.option-tag').textContent = code;
+      card.querySelector('.option-title').textContent = title;
+      card.querySelector('p').textContent = description;
+      const copy = card.querySelector('.copy');
+      if (layout === 'right') copy.append(copy.querySelector('.paused'));
+      const vote = card.querySelector('.vote');
+      vote.dataset.choice = code;
+      vote.textContent = `Pilih ${code}`;
+      container.append(card);
+    }
+
+    function render() {
+      const state = new FormData(form);
+      const hasLyrics = state.get('content') === 'lyrics';
+      for (const scene of container.querySelectorAll('.scene')) {
+        scene.dataset.width = state.get('width');
+        scene.dataset.content = state.get('content');
+        scene.querySelector('.cover').hidden = state.get('cover') === 'off';
+        scene.querySelector('.paused').hidden = state.get('playback') !== 'paused';
+        scene.querySelector('.lyric').textContent = hasLyrics
+          ? 'Acres of open stars, headlights of precious cars, life imitating art'
+          : 'Blue Hour on the West Coast — The Midnight Atlas';
+      }
+    }
+
+    form.addEventListener('change', render);
+    container.addEventListener('click', (event) => {
+      const selected = event.target.closest('.vote');
+      if (!selected) return;
+      for (const button of container.querySelectorAll('.vote')) {
+        button.setAttribute('aria-pressed', String(button === selected));
+        button.closest('article').toggleAttribute('data-selected', button === selected);
+      }
+      result.textContent = `Opsi ${selected.dataset.choice} dipilih. Konfirmasi di chat untuk lanjut, atau minta revisi.`;
+    });
+    render();
+  </script>
+</body>
+</html>
