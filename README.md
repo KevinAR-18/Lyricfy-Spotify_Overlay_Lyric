@@ -46,21 +46,6 @@ Keep lyrics and optional album artwork visible beside the taskbar.
 
 </details>
 
-### Review overlay designs in a browser
-
-For contributors using OpenCode, load `@lyricfy-visual-preview` to compare UI
-proposals on localhost before changing the app. To open the current Taskbar Left
-review directly, run this from the repository root with Node.js 20 or newer:
-
-```powershell
-node .opencode/skills/lyricfy-visual-preview/scripts/start-preview.cjs
-```
-
-Open the full `url` printed by the server, including its session key. Try the
-playback, width, artwork, and text controls, then pick a layout. The preview is
-interactive HTML, not a running copy of Lyricfy: it doesn't need Qt, Spotify,
-or an MCP server. Use `Ctrl+C` in the server terminal to stop it.
-
 ## Features
 
 - Optional Cinematic lyric readability toggle with adaptive dark backdrops, improved text contrast, and soft shadows; off by default, with live preview and saved preferences

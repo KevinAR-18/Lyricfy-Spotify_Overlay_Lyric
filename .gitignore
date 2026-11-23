@@ -36,5 +36,6 @@ releases/*
 /recordings/
 /assets/screenshots/raw/
 
-# Superpowers Visual Companion sessions (local HTML copies, URLs, and votes).
+# Local OpenCode preview skill and Superpowers Visual Companion sessions.
+/.opencode/skills/lyricfy-visual-preview/
 /.superpowers/brainstorm/
