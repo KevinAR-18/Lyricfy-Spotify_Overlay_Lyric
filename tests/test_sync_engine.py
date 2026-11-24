@@ -39,6 +39,22 @@ class TestCurrentLine:
         assert index == 1
         assert line.timestamp_ms == 2000
 
+    def test_duplicate_timestamps_and_backward_seek(self):
+        engine = _engine(1000, 2000, 2000, 3000)
+        assert engine.current_line(3000)[0] == 3
+        assert engine.current_line(2000)[0] == 2
+        assert engine.current_line(1999)[0] == 0
+        assert engine.current_line(999) == (-1, None)
+
+    def test_replacing_lyrics_rebuilds_timestamp_index(self):
+        engine = _engine(1000, 2000, 3000)
+        replacement = LyricLine(5000, "New track")
+        engine.set_lyrics(LyricsData(source="test", lines=[replacement]))
+        assert engine.current_line(3000) == (-1, None)
+        assert engine.current_line(5000) == (0, replacement)
+        engine.set_lyrics(LyricsData(source="none", lines=[]))
+        assert engine.current_line(5000) == (-1, None)
+
 
 class TestNextLine:
     def test_next_after_active(self):

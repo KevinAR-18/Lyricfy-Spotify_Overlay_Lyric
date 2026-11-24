@@ -251,7 +251,7 @@ class AppController(QObject):
         self._cover_request_id += 1
         self._cover_retry_due_at = 0.0
         self.sync_engine.set_lyrics(LyricsData(source="none", lines=[]))
-        self._render_cinematic_state()
+        self._render_current_state()
         self.overlay.load_config_values(config)
         if self.playback_client is None:
             self.overlay.set_track(None)
@@ -293,7 +293,7 @@ class AppController(QObject):
             self.overlay.set_album_cover(None)
             self.overlay.set_lines("", "")
             self.overlay.show_status("")
-            self._render_cinematic_state()
+            self._render_current_state()
             return
 
         track_changed = self.snapshot.track is None or self.snapshot.track.track_id != track.track_id
@@ -432,9 +432,9 @@ class AppController(QObject):
         self.worker.start()
 
     def _render_current_state(self) -> None:
-        self._render_cinematic_state()
         track = self.snapshot.track
         if track is None:
+            self._render_cinematic_state(0, -1)
             self._classic_frame = None
             self._classic_progress = None
             return
@@ -442,6 +442,7 @@ class AppController(QObject):
         estimated_progress_ms = self._estimated_progress_ms(track)
         adjusted_progress_ms = max(0, estimated_progress_ms + self.config.lyric_offset_ms)
         active_index, active_line = self.sync_engine.current_line(adjusted_progress_ms)
+        self._render_cinematic_state(adjusted_progress_ms, active_index)
         next_line = self.sync_engine.next_line(active_index)
         rendered_line = (
             active_line.text if active_line else "",
@@ -467,11 +468,9 @@ class AppController(QObject):
         self._last_rendered_line = rendered_line
         self.overlay.set_lines(*rendered_line, transition_ms=duration)
 
-    def _render_cinematic_state(self) -> None:
+    def _render_cinematic_state(self, progress: int, index: int) -> None:
         track = self.snapshot.track
         lyrics = self.snapshot.lyrics
-        progress = max(0, self._estimated_progress_ms(track) + self.config.lyric_offset_ms) if track else 0
-        index, _ = self.sync_engine.current_line(progress)
         lines = lyrics.lines if lyrics else []
         rows = [{"index": i, "text": lines[i].text}
                 for i in range(max(0, index - 2), min(len(lines), index + 3))]

@@ -1,31 +1,25 @@
 from __future__ import annotations
 
+from bisect import bisect_right
+
 from .models import LyricLine, LyricsData
 
 
 class SyncEngine:
     def __init__(self) -> None:
         self._lyrics = LyricsData(source="none", lines=[])
+        self._timestamps: tuple[int, ...] = ()
 
     def set_lyrics(self, lyrics: LyricsData) -> None:
         self._lyrics = lyrics
+        self._timestamps = tuple(line.timestamp_ms for line in lyrics.lines)
 
     def current_line(self, progress_ms: int) -> tuple[int, LyricLine | None]:
-        lines = self._lyrics.lines
-        if not lines:
-            return -1, None
-
-        active_index = -1
-        for index, line in enumerate(lines):
-            if line.timestamp_ms <= progress_ms:
-                active_index = index
-            else:
-                break
-
+        active_index = bisect_right(self._timestamps, progress_ms) - 1
         if active_index == -1:
             return -1, None
 
-        return active_index, lines[active_index]
+        return active_index, self._lyrics.lines[active_index]
 
     def next_line(self, active_index: int) -> LyricLine | None:
         if active_index < 0:
