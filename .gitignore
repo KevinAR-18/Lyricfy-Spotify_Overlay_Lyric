@@ -1,6 +1,14 @@
 .env
 .venv
 .spotify_cache
+# Private signing keys and certificate bundles must never be committed.
+*.pem
+*.key
+*.p12
+*.pfx
+# Generated release metadata belongs on GitHub Releases, not in source control.
+update-manifest.json
+update-manifest.sig
 examplebuildbat.bat
 src/lyric_overlay/__pycache__/
 __pycache__/
@@ -30,6 +38,7 @@ release_notes*.txt
 releases/*
 !releases/release-v1.6.1.txt
 !releases/release-v1.6.2.txt
+!releases/release-v1.6.3.txt
 
 # Local recording tools and intermediate captures; published previews stay tracked.
 /tools/recording/
