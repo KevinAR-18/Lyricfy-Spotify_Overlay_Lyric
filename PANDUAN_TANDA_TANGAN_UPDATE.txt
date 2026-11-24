@@ -1,0 +1,41 @@
+PANDUAN TANDA TANGAN UPDATE LYRICFY
+===================================
+
+Jalankan perintah berikut di PowerShell dari folder proyek:
+
+    cd D:\Project\Lyricfy
+
+1. Build aplikasi dengan .\build.bat, lalu build installer di InstallForge.
+   Pastikan versi aplikasi, konfigurasi InstallForge, dan nama installer cocok.
+
+2. Setelah installer FINAL selesai, jalankan perintah sesuai versinya.
+   Untuk v1.6.3, salin satu baris ini:
+
+    .\.venv\Scripts\python.exe tools\release_signing.py sign "$env:USERPROFILE\lyricfy-release-private.pem" v1.6.3 "releases\Lyricfy Setup v1.6.3.exe"
+
+3. Untuk versi berikutnya, ubah KEDUA bagian versi. Contoh untuk v1.6.4:
+
+    .\.venv\Scripts\python.exe tools\release_signing.py sign "$env:USERPROFILE\lyricfy-release-private.pem" v1.6.4 "releases\Lyricfy Setup v1.6.4.exe"
+
+   Jika private key disimpan di lokasi lain, sesuaikan path file .pem.
+
+4. Jika berhasil akan muncul:
+
+    Created update-manifest.json and update-manifest.sig alongside the installer.
+
+   Unggah tiga file dari folder releases ke GitHub Release versi yang sesuai:
+   - Installer Lyricfy Setup v<VERSI>.exe (GitHub dapat mengganti spasi dengan titik)
+   - update-manifest.json
+   - update-manifest.sig
+
+   Pastikan nama installer pada GitHub sama persis dengan field installer di
+   update-manifest.json. Skrip membuat manifest dengan nama memakai titik.
+
+PENTING
+-------
+- Manifest dan signature selalu ditimpa saat perintah sign dijalankan. Pastikan
+  keduanya dibuat untuk installer dan versi yang akan diunggah.
+- Jika installer dibangun ulang atau diubah, tanda tangani ulang sebelum upload.
+- Jangan pernah mengunggah atau membagikan file private key .pem. Simpan cadangan
+  di tempat aman; kunci ini diperlukan untuk setiap rilis berikutnya.
+- Lihat RELEASE_GUIDE.md untuk panduan lengkap, termasuk pengujian dan rilis.
