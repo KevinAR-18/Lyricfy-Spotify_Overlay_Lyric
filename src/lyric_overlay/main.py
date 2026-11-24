@@ -120,7 +120,7 @@ class SettingsCoordinator:
         self.overlay.playback_status.setText(error or "Playback client ready — waiting for Spotify playback")
 
 
-def create_tray_menu(overlay, controller, cinematic, quit_callback):
+def create_tray_menu(overlay, controller, cinematic, quit_callback, update_callback=None):
     menu = QMenu()
     menu.addAction("Show Overlay", cinematic.show)
     menu.addAction("Hide Overlay", cinematic.hide)
@@ -167,6 +167,8 @@ def create_tray_menu(overlay, controller, cinematic, quit_callback):
         startup.addAction(action)
         startup_actions[hidden] = action
     menu.addAction("Settings…", overlay.open_settings_from_tray)
+    if update_callback is not None:
+        menu.addAction("Check for Updates…", update_callback)
     menu.addSeparator()
     version = menu.addAction(f"Lyricfy v{__version__}")
     version.setEnabled(False)
@@ -219,12 +221,15 @@ def main() -> int:
             tray.hide()
         app.quit()
 
+    from lyric_overlay.updater import UpdateCoordinator
+    updater = UpdateCoordinator(quit_app, app)
+
     if QSystemTrayIcon.isSystemTrayAvailable():
         tray = QSystemTrayIcon(app)
         if ICON_FILE.exists():
             tray.setIcon(QIcon(str(ICON_FILE)))
         tray.setToolTip(APP_NAME)
-        tray_menu = create_tray_menu(overlay, controller, cinematic, quit_app)
+        tray_menu = create_tray_menu(overlay, controller, cinematic, quit_app, lambda: updater.check(manual=True))
         tray.setContextMenu(tray_menu)
         tray.activated.connect(lambda reason: cinematic.show() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
         tray.show()
@@ -244,6 +249,7 @@ def main() -> int:
     overlay.overlay_hidden.connect(cinematic.pause_if_hidden)
     overlay.overlay_shown.connect(controller.resume_polling)
     app.aboutToQuit.connect(controller.shutdown)
+    app.aboutToQuit.connect(updater.pool.waitForDone)
     app.aboutToQuit.connect(cinematic.shutdown)
     overlay.set_track(None)
     overlay.set_lines("Starting Lyricfy…", "Connecting to Spotify playback")
@@ -252,6 +258,7 @@ def main() -> int:
     else:
         cinematic.show()
     QTimer.singleShot(0, coordinator.reconnect)
+    QTimer.singleShot(5000, updater.check)
     return app.exec()
 
 
