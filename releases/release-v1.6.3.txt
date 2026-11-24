@@ -1,0 +1,5 @@
+# Lyricfy v1.6.3 Release Notes
+
+- Optimized synced lyric lookup, especially near the end of long tracks.
+- Classic and Cinematic now use the same playback position for each lyric refresh.
+- No changes to saved settings, lyric files, or overlay layouts.

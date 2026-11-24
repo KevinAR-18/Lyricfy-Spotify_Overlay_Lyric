@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set VERSION=v1.6.2
+set VERSION=v1.6.3
 
 echo ========================================
 echo Building Lyricfy %VERSION%....
@@ -13,6 +13,12 @@ if not exist .venv\Scripts\pyinstaller.exe (
     echo   .venv\Scripts\python.exe -m pip install pyinstaller
     echo.
     pause
+    exit /b 1
+)
+
+.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'src'); from lyric_overlay.update_key import PUBLIC_KEY_HEX; sys.exit(0 if len(PUBLIC_KEY_HEX) == 64 and all(c in '0123456789abcdef' for c in PUBLIC_KEY_HEX) else 1)"
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Configure the release public key before building. See RELEASE_GUIDE.md.
     exit /b 1
 )
 
