@@ -9,6 +9,7 @@
 # Generated release metadata belongs on GitHub Releases, not in source control.
 update-manifest.json
 update-manifest.sig
+/PANDUAN_TANDA_TANGAN_UPDATE.txt
 examplebuildbat.bat
 src/lyric_overlay/__pycache__/
 __pycache__/
