@@ -4,6 +4,8 @@ Lyricfy is a lightweight Windows lyric overlay for Spotify built with Python and
 
 [Latest release](https://github.com/KevinAR-18/Lyricfy-Spotify_Overlay_Lyric/releases/latest)
 
+**Updates:** Lyricfy checks for new stable releases in the background. You can also select **Check for Updates…** from the system tray menu. When an update is available, choose whether to download and start the installer; the installer wizard and Windows permission prompt may require your input. Lyricfy verifies the signed update manifest and installer checksum before launching it. Users on v1.6.1 or older need to install a newer version manually once to get this feature.
+
 Maintainers: see [RELEASE_GUIDE.md](RELEASE_GUIDE.md) for signing and publishing updates.
 
 ## Preview
@@ -63,6 +65,7 @@ Keep lyrics and optional album artwork visible beside the taskbar.
 - Small overlay position adjustments are accepted without snapping back to the previous position
 - Compact Card and Floating overlays can sit partially beyond the left or right screen edge while keeping a 40px recovery area visible
 - System tray controls for show, hide, settings, and exit
+- Background checks for stable updates, plus **Check for Updates…** in the system tray
 - System tray presentation switch between `Classic` and `Cinematic`, plus Windows startup controls
 - Five-tab embedded Settings with `Non-API` / `Spotify API` playback selection
 - In-app settings for display presets, artwork, Spotify credentials, lyric offset, alignment, font, and colors
